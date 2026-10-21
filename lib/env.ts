@@ -612,6 +612,7 @@ const schema = z.object({
    */
   META_GRAPH_BASE_URL: z.string().optional().default(""),
   META_ADS_GRAPH_BASE_URL: z.string().optional().default(""),
+  META_INSTAGRAM_BASE_URL: z.string().optional().default(""),
 
   // Marca da instalação (white-label) — ver lib/branding.ts.
   // Sem prefixo NEXT_PUBLIC_ de propósito: essas seriam queimadas no bundle

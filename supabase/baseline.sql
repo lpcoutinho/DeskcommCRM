@@ -9355,14 +9355,22 @@ alter table public.channel_sessions
   add column if not exists datafy_waba_id text,
   add column if not exists datafy_token_encrypted bytea;
 
+-- meta_social (migration 0717, Instagram nativo pela API da Meta) — colunas do
+-- provider, nullable e antes das constraints que as referenciam.
+alter table public.channel_sessions
+  add column if not exists meta_social_account_id text,
+  add column if not exists meta_social_token_encrypted bytea,
+  add column if not exists meta_social_token_expires_at timestamptz;
+
 alter table public.channel_sessions
   drop constraint if exists channel_sessions_provider_check;
 
 alter table public.channel_sessions
   add constraint channel_sessions_provider_check
-  -- 'wacalls' (0233), 'zernio_social' (0368) e 'datafy' (0387) somados AQUI —
-  -- UM bloco só por constraint (não duplicar drop+add por migration).
-  check (provider = any (array['waha'::text, 'meta_cloud'::text, 'zernio'::text, 'wacalls'::text, 'zernio_social'::text, 'datafy'::text]));
+  -- 'wacalls' (0233), 'zernio_social' (0368), 'datafy' (0387) e 'meta_social'
+  -- (0717) somados AQUI — UM bloco só por constraint (não duplicar drop+add por
+  -- migration).
+  check (provider = any (array['waha'::text, 'meta_cloud'::text, 'zernio'::text, 'wacalls'::text, 'zernio_social'::text, 'datafy'::text, 'meta_social'::text]));
 
 alter table public.channel_sessions
   drop constraint if exists channel_sessions_provider_ref_check;
@@ -9375,7 +9383,8 @@ alter table public.channel_sessions
     -- é o mesmo intermediário, com outra superfície de canal.
     (provider in ('zernio', 'zernio_social') and zernio_account_id is not null) or
     (provider = 'wacalls'    and wacalls_session_id    is not null) or
-    (provider = 'datafy'     and datafy_phone_number_id is not null)
+    (provider = 'datafy'     and datafy_phone_number_id is not null) or
+    (provider = 'meta_social' and meta_social_account_id is not null)
   );
 
 comment on column public.channel_sessions.zernio_account_id is
@@ -14531,7 +14540,9 @@ alter table public.webhook_events_log
     -- (migration 0601) os provedores de cobrança do revendedor. A linha deles
     -- nasce com organization_id nulo e corpo {id,type}: é ponteiro, nunca o
     -- corpo do provedor, e fica invisível ao tenant pela própria policy.
-    'stripe', 'asaas'
+    'stripe', 'asaas',
+    -- (migration 0717) Instagram nativo pela API da Meta.
+    'meta_social'
   ));
 
 -- ---- a marca da instalação sai do .env e vai para o banco (migration 0155) ----
@@ -59926,3 +59937,38 @@ create view public.external_db_connections_safe
 
 revoke all on public.external_db_connections_safe from anon;
 grant select on public.external_db_connections_safe to authenticated;
+
+
+-- ---- Instagram nativo pela API da Meta: provider meta_social (migration 0717) ----
+-- As colunas e os dois CHECKs de `channel_sessions` estão no bloco ÚNICO das
+-- constraints, lá em cima (procure por `channel_sessions_provider_check`), e o
+-- `meta_social` no bloco único de `webhook_events_log_provider_check`. Aqui fica
+-- o que só pode vir depois: a dedup e o índice único da conta entre ativos.
+with ativos as (
+  select id,
+         row_number() over (
+           partition by meta_social_account_id
+           order by created_at desc nulls last, id desc
+         ) as posicao
+    from public.channel_sessions
+   where archived_at is null
+     and meta_social_account_id is not null
+)
+update public.channel_sessions s
+   set meta_social_account_id = s.meta_social_account_id || '-conflito-' || s.id::text
+  from ativos a
+ where a.id = s.id
+   and a.posicao > 1;
+
+create unique index if not exists channel_sessions_meta_social_account_id_ativo_unique
+  on public.channel_sessions (meta_social_account_id)
+  where archived_at is null and meta_social_account_id is not null;
+
+comment on column public.channel_sessions.meta_social_account_id is
+  'Id da conta profissional na Meta (Instagram) — o entry.id do webhook. É o sessionRef deste canal. Espelhado em lib/channels/session-ref.ts.';
+comment on column public.channel_sessions.meta_social_token_encrypted is
+  'Token de acesso da conta, cifrado por fn_encrypt_oauth. Nunca volta à tela depois de gravado.';
+comment on column public.channel_sessions.meta_social_token_expires_at is
+  'Validade conhecida do token. NULL = ainda não sabida; a renovação diária a preenche.';
+
+notify pgrst, 'reload schema';

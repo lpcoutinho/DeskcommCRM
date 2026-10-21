@@ -50,6 +50,8 @@ const SEM_FILTRO: Record<string, string> = {
   "agenda-expira-pendentes": "só libera o horário de pedido pendente vencido; escrita interna, sem custo nem saída",
   "agenda-google-push": "sincronia com o Google Agenda: deliberadamente não gatilhada (spec §4)",
   "agenda-google-refresh": "renova token do Google Agenda: deliberadamente não gatilhado (spec §4)",
+  "instagram-token":
+    "renova o token da conta do Instagram antes de vencer: sem custo e sem mensagem para fora. Pular organização parada deixaria o token morrer em 60 dias, e a volta da organização encontraria o canal desconectado",
   "agenda-google-sync": "sincronia com o Google Agenda: deliberadamente não gatilhada (spec §4)",
   "agent-dispatcher": "no-op permanente desde a convergência; não há o que filtrar",
   "canal-mudo-watcher": "só abre aviso na Central da própria org; sem custo nem saída",

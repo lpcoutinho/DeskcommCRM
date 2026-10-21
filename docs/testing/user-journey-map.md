@@ -3154,6 +3154,16 @@ de contrato; pareamento real por código ainda requer confirmação no celular.
 - QA local com Supabase e provedor de teste: entrada assinada, resposta manual, deduplicação, assinatura inválida, conta incorreta e concorrência de registro aprovadas.
 - QA visual local e na instalação self-host concluída; app/worker `788b0fe` saudáveis e testes de webhook do provedor aprovados. DM real e pareamento confirmado no celular permanecem pendentes.
 
+## Instagram nativo pela API da Meta — 2026-10-21
+
+- [P0] Conexões → Instagram: passo a passo visível antes de conectar; token + chave secreta validados na Meta antes de gravar; nada volta num GET.
+- [P0] DM do cliente entra na caixa de entrada com nome (perfil da Meta), IA pausada no canal novo; resposta humana sai pela thread.
+- [P0] Webhook com assinatura inválida, de outra conta ou repetido não produz mensagem; o handshake só responde com o token de verificação da sessão.
+- [P1] Configurar o webhook do app pela tela avisa que substitui o endereço do app; instalação sem https público recebe a explicação, não o erro da Meta.
+- [P1] Token renovado todo dia antes de vencer; token morto aparece como aviso pelo vigia de conexão.
+- Evidência automatizada: `lib/channels/meta-social/{webhook,adapter,renovacao}.test.ts`, `tests/unit/canal-instagram-vocabulario.test.ts`, matriz de capabilities.
+- Pendente: prova pela tela num ambiente fresco com conta real (app de teste na Meta) e DM real de ida e volta.
+
 ## Prospecção nativa — 2026-09-15
 
 [P0] Validado no navegador, com Next em modo produção e Supabase local: resultados comerciais semeados → escolher agente publicado, conexão, funil e duas etapas → definir oferta, critérios e ritmo → iniciar → ver contato, negócio e conversa criados → pausar a fila. Consulta do banco confirmou `paused/queued`, os três vínculos e zero mensagens. A busca paga e a entrega a pessoas reais não foram executadas neste QA. A Prospecção tem entrada direta na seção CRM do menu lateral para administradores.

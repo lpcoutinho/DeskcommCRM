@@ -238,6 +238,9 @@ export const AUDIT_ACTIONS = [
   "ai_agent.run_completed",
   "ai_agent.run_failed",
   "channel.connected",
+  // A rodada diária renovou (ou tentou renovar) o token de uma rede social
+  // conectada pela API da Meta. Emitida só quando houve efeito.
+  "channel.token_refreshed",
   "prospecting.changed",
   // A ABORDAGEM que SAIU (PR #963). Distinta de `prospecting.changed`, que é
   // configuração: esta é a única linha do produto que fala primeiro com quem

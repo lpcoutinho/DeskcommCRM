@@ -1,0 +1,227 @@
+/**
+ * Instagram nativo — o webhook, como módulo PURO: assinatura, handshake e leitura.
+ *
+ * ─── A assinatura é a da Meta, com o segredo DO APP ─────────────────────────
+ *
+ * A Meta assina o corpo cru com HMAC-SHA256 e o segredo do app
+ * (`X-Hub-Signature-256: sha256=<hex>`) — o mesmo esquema do canal oficial do
+ * WhatsApp, e por isso a conferência é `verifyMetaSignature`. A diferença é de
+ * ONDE vem o segredo: lá é da instalação (`META_APP_SECRET`); aqui cada
+ * organização traz o próprio app, e o segredo dele mora cifrado na sessão.
+ *
+ * ─── O token de verificação é DERIVADO, não guardado ────────────────────────
+ *
+ * O handshake (GET com `hub.verify_token`) só prova que quem assinou o webhook
+ * no painel da Meta conhecia um valor nosso. Guardar mais um segredo por sessão
+ * seria mais uma coluna sem ganho: o token sai do segredo do app e do id da
+ * sessão por HMAC, então é estável, único por conexão e só quem tem o segredo
+ * o recalcula. A tela o mostra para colar; o GET o recalcula para conferir.
+ *
+ * ─── O que este canal lê ────────────────────────────────────────────────────
+ *
+ * `object: "instagram"`, `entry[].messaging[]`: mensagem do cliente, eco do que
+ * a conta enviou (pelo CRM ou pelo app do Instagram) e leitura. Comentários
+ * (`entry[].changes[]`) chegam pelo mesmo webhook e ficam para a entrega dos
+ * comentários: hoje são contados e não gravados (o corpo cru fica no arquivo
+ * do webhook).
+ */
+import { createHmac } from "node:crypto";
+
+import { verifyMetaSignature } from "../meta/webhook";
+import { socialMessageId } from "../social/catalog";
+import type { SocialMessage } from "../social/parser";
+
+/** O header em que a Meta manda a assinatura do corpo. */
+export const HEADER_ASSINATURA_META = "x-hub-signature-256";
+
+/** A rede desta conexão, gravada em `metadata.social_platform`. */
+export const REDE_INSTAGRAM = "instagram" as const;
+
+/** A assinatura confere com o segredo do app? */
+export function verificarAssinaturaInstagram(
+  rawBody: string,
+  headers: Headers,
+  segredoDoApp: string | null,
+): boolean {
+  if (!segredoDoApp) return false;
+  return verifyMetaSignature(rawBody, headers.get(HEADER_ASSINATURA_META), segredoDoApp);
+}
+
+/** O token que a tela mostra e o handshake confere, derivado do segredo do app. */
+export function tokenDeVerificacao(segredoDoApp: string, channelSessionId: string): string {
+  return createHmac("sha256", segredoDoApp)
+    .update(`verificacao-do-webhook:${channelSessionId}`, "utf8")
+    .digest("hex")
+    .slice(0, 32);
+}
+
+/** Resposta do handshake: o `hub.challenge`, ou `null` para recusar. */
+export function respostaDoHandshake(
+  params: URLSearchParams,
+  segredoDoApp: string | null,
+  channelSessionId: string,
+): string | null {
+  if (!segredoDoApp) return null;
+  if (params.get("hub.mode") !== "subscribe") return null;
+  const recebido = params.get("hub.verify_token");
+  if (!recebido || recebido !== tokenDeVerificacao(segredoDoApp, channelSessionId)) return null;
+  return params.get("hub.challenge");
+}
+
+type Bruto = Record<string, unknown>;
+const obj = (v: unknown): Bruto | null =>
+  v && typeof v === "object" && !Array.isArray(v) ? (v as Bruto) : null;
+const str = (v: unknown): string | null => (typeof v === "string" && v.length > 0 ? v : null);
+/** A Meta manda ids como string, mas já houve número em payload de teste. */
+const id = (v: unknown): string | null =>
+  typeof v === "number" && Number.isFinite(v) ? String(v) : str(v);
+
+/** A leitura de um entregável do webhook: o que gravar, e o que só contar. */
+export interface LeituraDoWebhookInstagram {
+  /** O corpo é de outro objeto (`page`, `whatsapp_business_account`…). */
+  objetoEstranho: boolean;
+  /** Contas (`entry.id`) que aparecem no corpo — a guarda confere com a sessão. */
+  contas: string[];
+  /** Mensagens e ecos desta conta, já no formato da ingestão social. */
+  mensagens: SocialMessage[];
+  /** Leituras: o cliente viu a mensagem com este `mid`. */
+  leituras: { accountId: string; externalId: string; lidaEm: string | null }[];
+  /** Comentários e demais mudanças — fora do escopo desta entrega. */
+  mudancasIgnoradas: number;
+  /** Itens de `messaging` que não são mensagem nem leitura (reação, postback…). */
+  eventosIgnorados: number;
+}
+
+function instante(ms: unknown): string | null {
+  return typeof ms === "number" && Number.isFinite(ms) ? new Date(ms).toISOString() : null;
+}
+
+/** Tipos de anexo da Meta que a caixa de entrada sabe mostrar com o que já tem. */
+function tipoDoAnexo(tipo: string | null): string {
+  switch (tipo) {
+    case "image":
+    case "video":
+    case "audio":
+      return tipo;
+    // Reel e publicação compartilhados chegam com a URL do vídeo/da mídia.
+    case "ig_reel":
+    case "reel":
+      return "video";
+    case "animated_image":
+      return "image";
+    default:
+      return "document";
+  }
+}
+
+function lerMensagem(
+  conta: string,
+  item: Bruto,
+): { tipo: "mensagem"; msg: SocialMessage } | { tipo: "leitura"; mid: string; em: string | null } | null {
+  const remetente = id(obj(item.sender)?.id);
+  const destinatario = id(obj(item.recipient)?.id);
+  const quando = instante(item.timestamp);
+
+  const leitura = obj(item.read);
+  if (leitura) {
+    const mid = str(leitura.mid);
+    return mid ? { tipo: "leitura", mid, em: quando } : null;
+  }
+
+  const m = obj(item.message);
+  if (!m || !remetente || !destinatario) return null;
+  // Mensagem apagada pelo cliente: não há o que gravar, e criar uma linha vazia
+  // seria inventar uma mensagem.
+  if (m.is_deleted === true) return null;
+  const mid = str(m.mid);
+  if (!mid) return null;
+
+  // Eco = a CONTA enviou (pelo CRM ou pelo app do Instagram). O participante é
+  // quem recebeu; na entrada, quem mandou. O eco do nosso próprio envio volta
+  // com o mesmo `mid` que o envio devolveu e cai na deduplicação.
+  const eco = m.is_echo === true || remetente === conta;
+  const participante = eco ? destinatario : remetente;
+  if (participante === conta) return null; // a conta falando consigo mesma
+
+  const anexos: { type: string; url: string }[] = [];
+  for (const a of Array.isArray(m.attachments) ? m.attachments : []) {
+    const anexo = obj(a);
+    const url = str(obj(anexo?.payload)?.url);
+    if (url) anexos.push({ type: tipoDoAnexo(str(anexo?.type)), url });
+  }
+
+  return {
+    tipo: "mensagem",
+    msg: {
+      platform: REDE_INSTAGRAM,
+      participantId: participante,
+      accountId: conta,
+      // A "thread" do Instagram É o participante: o envio endereça por
+      // `recipient.id`, e é isso que fica em `provider_conversation_id`.
+      conversationId: participante,
+      externalId: socialMessageId(conta, mid),
+      direction: eco ? "outbound" : "inbound",
+      kind: "message",
+      status: eco ? "sent" : undefined,
+      text: str(m.text),
+      sentAt: quando,
+      attachments: anexos,
+      // O clique em anúncio que abre a conversa chega como `referral`; quem
+      // interpreta é a atribuição de anúncio, como nos outros canais.
+      referral: obj(item.referral) ?? obj(m.referral) ?? null,
+      identity: { phone: null, bsuid: null, anchor: null, username: null, displayName: null },
+    },
+  };
+}
+
+/**
+ * Lê o corpo de um entregável. Nunca lança: JSON inválido ou objeto estranho
+ * voltam como leitura vazia, e quem decide o desfecho é a entrada.
+ */
+export function lerWebhookInstagram(rawBody: string): LeituraDoWebhookInstagram | null {
+  let corpo: Bruto | null;
+  try {
+    corpo = obj(JSON.parse(rawBody));
+  } catch {
+    return null;
+  }
+  if (!corpo) return null;
+
+  const leitura: LeituraDoWebhookInstagram = {
+    objetoEstranho: corpo.object !== "instagram",
+    contas: [],
+    mensagens: [],
+    leituras: [],
+    mudancasIgnoradas: 0,
+    eventosIgnorados: 0,
+  };
+  if (leitura.objetoEstranho) return leitura;
+
+  for (const e of Array.isArray(corpo.entry) ? corpo.entry : []) {
+    const entrada = obj(e);
+    const conta = id(entrada?.id);
+    if (!entrada || !conta) continue;
+    if (!leitura.contas.includes(conta)) leitura.contas.push(conta);
+
+    if (Array.isArray(entrada.changes)) leitura.mudancasIgnoradas += entrada.changes.length;
+
+    for (const i of Array.isArray(entrada.messaging) ? entrada.messaging : []) {
+      const item = obj(i);
+      const lido = item ? lerMensagem(conta, item) : null;
+      if (!lido) {
+        leitura.eventosIgnorados += 1;
+        continue;
+      }
+      if (lido.tipo === "leitura") {
+        leitura.leituras.push({
+          accountId: conta,
+          externalId: socialMessageId(conta, lido.mid),
+          lidaEm: lido.em,
+        });
+      } else {
+        leitura.mensagens.push(lido.msg);
+      }
+    }
+  }
+  return leitura;
+}

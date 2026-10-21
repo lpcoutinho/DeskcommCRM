@@ -942,6 +942,16 @@ const HOSTS_DECLARADOS: Record<string, EntradaDeHost> = {
     motivo:
       "endpoint da Graph API do WhatsApp Cloud — 6 arquivos: envio de template, sincronização de modelos, validação de credencial, conversões e insights. É contrato da Meta, não escolha nossa.",
   },
+  "graph.instagram.com": {
+    categoria: "FORNECEDOR",
+    motivo:
+      "endpoint da API do Instagram com login do Instagram (`lib/channels/meta-social/graph.ts`): envio de mensagem direta, validação e renovação do token da conta. Host diferente do `graph.facebook.com` por contrato da Meta, não escolha nossa; a conta e o app são do cliente.",
+  },
+  "developers.facebook.com": {
+    categoria: "CONSOLE",
+    motivo:
+      "painel de apps da Meta, citado no passo a passo de Conexões › Instagram (`components/connections/CanalInstagramClient.tsx`): é onde a empresa cria o PRÓPRIO app e copia o token e a chave secreta dela. Trocar pelo domínio do revendedor mandaria a pessoa para um lugar onde a credencial não existe.",
+  },
   "www.googleapis.com": {
     categoria: "FORNECEDOR",
     motivo:
@@ -1240,6 +1250,11 @@ describe("catraca de host de terceiro no código que embarca", () => {
       // CONSOLE — o link "Onde pegar a chave" da tela de Credenciais.
       "console.typesafe.ai",
       "deskcomm.app",
+      // Decisão escrita: o painel de apps da Meta, no passo a passo de
+      // Conexões › Instagram. Mesmo caso dos outros CONSOLE — é onde a empresa
+      // cria o PRÓPRIO app e pega o token e a chave secreta. O produto fala
+      // com `graph.instagram.com` (FORNECEDOR), nunca com este host.
+      "developers.facebook.com",
       // Link que abre o pino que o CLIENTE mandou (`lib/messaging/localizacao.ts`).
       // Mesma natureza do `wa.me` abaixo: o produto não fala com o host, quem
       // abre é o celular do atendente. Crescimento escrito, como a regra pede.

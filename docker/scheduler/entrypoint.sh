@@ -102,6 +102,9 @@ CRONS="
 # dentro da rota: o pior caso cabe nos 60 s com folga.
 */10 * * * *|60|api/v1/cron/contact-names
 17 * * * *|60|api/v1/cron/contact-proposals-watcher
+# O TOKEN DO INSTAGRAM. Uma vez por dia: ele vale 60 dias e a renovação só
+# age quando faltam menos de 20, então rodar mais vezes só repetiria o nada.
+41 4 * * *|60|api/v1/cron/instagram-token
 23 * * * *|60|api/v1/cron/followup-sem-agente
 # O ANIVERSÁRIO. De hora em hora, e não uma vez ao dia, porque quem decide o
 # momento é o relógio de parede de CADA organização: a rodada só age naquela

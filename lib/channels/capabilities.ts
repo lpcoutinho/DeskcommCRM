@@ -110,6 +110,23 @@ export const CHANNEL_CAPABILITIES: Record<ProviderDeMensagem, ChannelCapabilitie
     costPerMessage: true,
     alteraMensagemEnviada: false,
   },
+  // Instagram nativo pela API da Meta (e o Messenger, quando entrar): a mesma
+  // hetero-restrição das redes sociais — a Meta só deixa responder dentro de 24h
+  // da última mensagem do cliente, e não há modelo aprovado que reabra a janela.
+  // Não há banimento por volume (a plataforma recusa na hora, com código) nem
+  // cobrança por mensagem. `minIntervalMs` é o mesmo piso do canal social
+  // intermediado: a plataforma limita por conta, não por destinatário.
+  meta_social: {
+    freeformOutsideWindow: false,
+    requiresTemplates: false,
+    canManageTemplates: false,
+    banRisk: false,
+    minIntervalMs: 1000,
+    voiceNote: "server-convert",
+    groups: "none",
+    costPerMessage: false,
+    alteraMensagemEnviada: false,
+  },
 };
 
 /**
@@ -134,6 +151,8 @@ export const CHANNEL_PROVIDER_SOCIAL: ChannelProvider = "zernio_social";
 export const CHANNEL_PROVIDER_ZERNIO: ChannelProvider = "zernio";
 /** Parceiro que espelha a Cloud API — canal opcional da instalação, desligado por padrão. */
 export const CHANNEL_PROVIDER_DATAFY: ChannelProvider = "datafy";
+/** Instagram nativo pela API da Meta — credencial por organização, pela tela. */
+export const CHANNEL_PROVIDER_META_SOCIAL: ChannelProvider = "meta_social";
 /** Chamada de voz WhatsApp (spec 18). Não transporta mensagem — ver abaixo. */
 export const CHANNEL_PROVIDER_WACALLS: ChannelProvider = "wacalls";
 
@@ -158,6 +177,7 @@ export const PROVIDERS_DE_MENSAGEM = [
   "zernio",
   "zernio_social",
   "datafy",
+  "meta_social",
 ] as const satisfies readonly ProviderDeMensagem[];
 
 /**
