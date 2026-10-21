@@ -169,6 +169,15 @@ const PROVA_DE_MODULO: Record<string, { readonly arquivo: string; readonly razao
       "imutabilidade da parcela paga (status e financial_entry_id não mudam sem o caixa) e a " +
       "recusa de FK cross-org. A leitura cross-org por contagem é medida neste arquivo.",
   },
+  // 0722 — a fila de posts do módulo de publicações.
+  publicacoes_posts: {
+    arquivo: "tests/invariants/publicacoes-modulo.test.ts",
+    razao:
+      "JWT real (`set role authenticated` + claims): leitura cross-org por contagem é zero; " +
+      "viewer e agent não criam, não editam e não apagam; manager escreve só os estados da " +
+      "pessoa, não escreve `publicado` nem mexe em post que já saiu, e não pendura post em " +
+      "conta de OUTRA organização.",
+  },
   // #1907 — as cinco tabelas da comanda, que nascem em `fn_financeiro_provisionar()`
   // (ADR-0002 D2/D3). A prova comportamental é a MESMA da lista de leitura
   // org-scoped de `rls-isolation.test.ts`: linha REAL semeada por organização e

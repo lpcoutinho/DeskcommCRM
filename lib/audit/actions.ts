@@ -241,6 +241,13 @@ export const AUDIT_ACTIONS = [
   // A rodada diária renovou (ou tentou renovar) o token de uma rede social
   // conectada pela API da Meta. Emitida só quando houve efeito.
   "channel.token_refreshed",
+  // Módulo de publicações (ADR-0002): o post criado, editado ou apagado pela
+  // pessoa, e o desfecho da fila (publicado na rede ou falhou de vez).
+  "publicacao.criada",
+  "publicacao.alterada",
+  "publicacao.removida",
+  "publicacao.publicada",
+  "publicacao.falhou",
   "prospecting.changed",
   // A ABORDAGEM que SAIU (PR #963). Distinta de `prospecting.changed`, que é
   // configuração: esta é a única linha do produto que fala primeiro com quem

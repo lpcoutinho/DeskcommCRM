@@ -186,6 +186,13 @@ export const POLITICAS_DE_AVISO = {
     refs: ["task"],
     orientacao: "A tarefa venceu sem conclusão. Abra e conclua, ou reagende o prazo se ele não for mais possível.",
   },
+  // O post é do módulo de publicações, que pode não estar instalado: o aviso
+  // leva à LISTA (a linha com o erro aparece lá), não a um alvo por id.
+  publicacao_falhou: {
+    refs: [],
+    orientacao: "Abra as publicações: o post que falhou mostra o motivo. Corrija e agende de novo.",
+    geral: { papel: "manager", href: "/app/publicacoes", rotulo: "Abrir publicações" },
+  },
   other: { refs: ["agenda_reminder_sender", "lead", "channel_session", "appointment", "ai_agent", "ai_provider_credential", "agent_case"], orientacao: "Confira a situação descrita neste aviso com a pessoa responsável." },
 } satisfies Record<InboxKind, Politica>;
 

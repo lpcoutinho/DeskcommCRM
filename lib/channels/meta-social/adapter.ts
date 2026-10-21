@@ -25,6 +25,7 @@ import { CHANNEL_PROVIDER_META_SOCIAL } from "../capabilities";
 import { socialMessageId } from "../social/catalog";
 import type { ChannelAdapter, ChannelHealth, OutboundEnvelope } from "../types";
 import { chamarGraphInstagram, ErroDaGraphInstagram } from "./graph";
+import { publicarNoInstagram } from "./publicacao";
 import { credencialInstagram } from "./session";
 
 /** Prefixo que o handler traduz para `queued` (sem credencial ≠ falha de envio). */
@@ -93,6 +94,9 @@ export const metaSocialAdapter: ChannelAdapter = {
   async sendTemplate() {
     throw new Error("O Instagram não usa modelos de WhatsApp.");
   },
+
+  // Publicar no perfil (feed, reels, stories) — ver `./publicacao.ts`.
+  publicarConteudo: (input) => publicarNoInstagram(input),
 
   async checkHealth(input): Promise<ChannelHealth> {
     const cred = await credencialInstagram(createAdminClient(), {

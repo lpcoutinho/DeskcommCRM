@@ -62,12 +62,14 @@ export const MODULOS_OPCIONAIS = [
   "financeiro",
   "cobranca",
   "login_codex",
+  // Módulo de tabela (ADR-0002): a fila de posts nasce em `fn_publicacoes_provisionar`.
+  "publicacoes",
 ] as const;
 export type ModuloOpcional = (typeof MODULOS_OPCIONAIS)[number];
 
 /** Os módulos de tabela do ADR-0002 dentro de `MODULOS_OPCIONAIS` — resolvidos por
  * `modulos_instalados.estado = 'ativo'`, nunca por `platform_config`. */
-const MODULOS_DE_TABELA = ["honorarios", "financeiro"] as const satisfies readonly ModuloOpcional[];
+const MODULOS_DE_TABELA = ["honorarios", "financeiro", "publicacoes"] as const satisfies readonly ModuloOpcional[];
 
 /**
  * Só os módulos por FLAG — os que a tela `/admin/sistema` liga e desliga via

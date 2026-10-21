@@ -345,6 +345,19 @@ export const NAV_CATALOG = [
     minRole: "manager",
   },
   {
+    // Módulo opcional (ADR-0002), fonte `modulos_instalados` — a porta só existe
+    // depois que o administrador da instalação instala `publicacoes` em
+    // `/admin/modulos`. Mesmo mecanismo da porta de honorários.
+    href: "/app/publicacoes",
+    label: "Publicações",
+    description: "Agende e publique posts no Instagram conectado, e veja o que saiu e o que falhou.",
+    icon: "CalendarBlank",
+    group: "crm",
+    section: "Preparar a venda",
+    minRole: "viewer",
+    modulo: "publicacoes",
+  },
+  {
     // ⚠️ Esta tela nasceu porque a FERRAMENTA já existia sem ela. O agente de IA
     // vinha com "procurar produto na loja" ligada por padrão, lendo uma tabela
     // que ninguém nunca preencheu — e o efeito não era silêncio: era o agente

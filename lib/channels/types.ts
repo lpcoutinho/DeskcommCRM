@@ -500,7 +500,38 @@ export interface ChannelAdapter {
     /** Valores dos `{{n}}`, na ordem em que a definição os declara. */
     values: Record<string, string>;
   }): Promise<{ externalId: string | null }>;
+
+  /**
+   * Publica um post no perfil da conta (feed, reels, stories). OPCIONAL: só
+   * rede social publica conteúdo, e a feature pergunta pela PRESENÇA do método
+   * em vez de perguntar QUAL canal é (invariante 1 da doutrina de canal).
+   *
+   * Em DUAS etapas, porque vídeo leva minutos para a rede processar: a primeira
+   * chamada monta o container e pode devolver `processando` com o id dele; a
+   * seguinte RETOMA por esse id em vez de montar outro. Montar container não
+   * publica nada — publicar é o último passo, e só ele.
+   *
+   * LANÇA `ErroDePublicacao` (`./publicacao`), que diz se adianta tentar de
+   * novo (`definitivo: false`) ou se a pessoa precisa mudar algo.
+   */
+  publicarConteudo?(input: PublicacaoInput): Promise<PublicacaoResultado>;
 }
+
+export type FormatoDePublicacao = "imagem" | "video" | "carrossel" | "reel" | "story";
+
+export interface PublicacaoInput extends ChannelTenantScope {
+  sessionRef: string;
+  formato: FormatoDePublicacao;
+  legenda: string;
+  /** URLs que a rede consegue baixar (assinadas e temporárias), na ordem do post. */
+  midias: { url: string; tipo: "imagem" | "video" }[];
+  /** Container montado numa rodada anterior — retomar, nunca montar outro. */
+  containerId: string | null;
+}
+
+export type PublicacaoResultado =
+  | { estado: "processando"; containerId: string }
+  | { estado: "publicado"; idExterno: string; link: string | null };
 
 /** O que o transporte respondeu quando perguntamos se está de pé. */
 export interface ChannelHealth {
