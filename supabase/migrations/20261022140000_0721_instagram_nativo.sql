@@ -1,6 +1,6 @@
 -- manifest: Canal de Instagram nativo pela API da Meta (provider meta_social) — conta, token cifrado e validade na sessão, no CHECK do provider e no arquivo do webhook
 --
--- 0717 · Instagram nativo (Graph API com login do Instagram), sem intermediário.
+-- 0721 · Instagram nativo (Graph API com login do Instagram), sem intermediário.
 --
 -- ─── O que entra ────────────────────────────────────────────────────────────
 -- Um provider de canal de mensagem novo, `meta_social`, para as redes da Meta

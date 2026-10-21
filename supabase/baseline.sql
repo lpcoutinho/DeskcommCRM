@@ -9355,7 +9355,7 @@ alter table public.channel_sessions
   add column if not exists datafy_waba_id text,
   add column if not exists datafy_token_encrypted bytea;
 
--- meta_social (migration 0717, Instagram nativo pela API da Meta) — colunas do
+-- meta_social (migration 0721, Instagram nativo pela API da Meta) — colunas do
 -- provider, nullable e antes das constraints que as referenciam.
 alter table public.channel_sessions
   add column if not exists meta_social_account_id text,
@@ -9368,7 +9368,7 @@ alter table public.channel_sessions
 alter table public.channel_sessions
   add constraint channel_sessions_provider_check
   -- 'wacalls' (0233), 'zernio_social' (0368), 'datafy' (0387) e 'meta_social'
-  -- (0717) somados AQUI — UM bloco só por constraint (não duplicar drop+add por
+  -- (0721) somados AQUI — UM bloco só por constraint (não duplicar drop+add por
   -- migration).
   check (provider = any (array['waha'::text, 'meta_cloud'::text, 'zernio'::text, 'wacalls'::text, 'zernio_social'::text, 'datafy'::text, 'meta_social'::text]));
 
@@ -14541,7 +14541,7 @@ alter table public.webhook_events_log
     -- nasce com organization_id nulo e corpo {id,type}: é ponteiro, nunca o
     -- corpo do provedor, e fica invisível ao tenant pela própria policy.
     'stripe', 'asaas',
-    -- (migration 0717) Instagram nativo pela API da Meta.
+    -- (migration 0721) Instagram nativo pela API da Meta.
     'meta_social'
   ));
 
@@ -59939,7 +59939,7 @@ revoke all on public.external_db_connections_safe from anon;
 grant select on public.external_db_connections_safe to authenticated;
 
 
--- ---- Instagram nativo pela API da Meta: provider meta_social (migration 0717) ----
+-- ---- Instagram nativo pela API da Meta: provider meta_social (migration 0721) ----
 -- As colunas e os dois CHECKs de `channel_sessions` estão no bloco ÚNICO das
 -- constraints, lá em cima (procure por `channel_sessions_provider_check`), e o
 -- `meta_social` no bloco único de `webhook_events_log_provider_check`. Aqui fica

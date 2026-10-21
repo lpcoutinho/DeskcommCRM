@@ -29,7 +29,7 @@ apresentação já lê no canal intermediado. Capabilities: sem texto livre fora
 janela de 24h, sem modelos, sem banimento por volume, sem grupos, sem custo por
 mensagem.
 
-Colunas novas em `channel_sessions` (migration 0717 + apêndice do baseline):
+Colunas novas em `channel_sessions` (migration 0721 + apêndice do baseline):
 
 | Coluna | O que é |
 |---|---|
