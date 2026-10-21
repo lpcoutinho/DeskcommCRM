@@ -58,8 +58,8 @@ describe("instalado", () => {
 
       insert into public.organizations (id, slug, legal_name, display_name) values
         ('${ORG_B}', 'publicacoes-b', 'Publicacoes B', 'Pub B') on conflict (id) do nothing;
-      insert into public.channel_sessions (id, organization_id, provider, waha_session_name, display_name)
-        values ('${SESSAO_B}', '${ORG_B}', 'waha', 'pub-b', 'B') on conflict (id) do nothing;
+      insert into public.channel_sessions (id, organization_id, provider, waha_session_name, display_name, webhook_secret_encrypted)
+        values ('${SESSAO_B}', '${ORG_B}', 'waha', 'pub-b', 'B', '\\x00'::bytea) on conflict (id) do nothing;
 
       insert into public.publicacoes_posts (id, organization_id, channel_session_id, formato, midias, status, agendado_para, updated_at) values
         ('${RASCUNHO}', '${GOV_ORG}', '${GOV_SESSION}', 'imagem', ${MIDIA}, 'rascunho', null, now()),
@@ -111,6 +111,11 @@ describe("instalado", () => {
   it("⭐ manager não escreve 'publicado' pela sessão, nem mexe no que já saiu", () => {
     expect(writeCountAs(GOV_MANAGER, `update public.publicacoes_posts set status = 'publicado' where id = '${RASCUNHO}'`)).toBe(0);
     expect(writeCountAs(GOV_MANAGER, `update public.publicacoes_posts set legenda = 'x' where id = '${PUBLICADO}'`)).toBe(0);
+    // O ataque que só o USING barra: devolver o post publicado à fila — o WITH
+    // CHECK aceitaria (`agendado` é estado da pessoa), e a fila o publicaria de NOVO.
+    expect(
+      writeCountAs(GOV_MANAGER, `update public.publicacoes_posts set status = 'agendado', agendado_para = now() where id = '${PUBLICADO}'`),
+    ).toBe(0);
     expect(writeCountAs(GOV_MANAGER, `delete from public.publicacoes_posts where id = '${PUBLICADO}'`)).toBe(0);
     expect(statusDe(PUBLICADO)).toBe("publicado");
   });
