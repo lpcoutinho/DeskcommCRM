@@ -22,7 +22,7 @@ import { decryptWebhookSecret } from "@/lib/webhooks/secrets";
 
 import { CHANNEL_PROVIDER_META_SOCIAL } from "../capabilities";
 import { reactivateChannelSession } from "../reactivate";
-import { REDE_INSTAGRAM } from "./webhook";
+import { redeDaSessao, type RedeSocial } from "./graph";
 
 export interface SessaoInstagram {
   id: string;
@@ -36,6 +36,7 @@ export interface SessaoInstagram {
   /** Cifrado; quem precisa do segredo do app decifra no servidor. */
   webhookSecretEncrypted: string | null;
   archivedAt: string | null;
+  rede: RedeSocial;
 }
 
 const COLUNAS =
@@ -55,6 +56,7 @@ function toSessao(row: Record<string, unknown> | null): SessaoInstagram | null {
     tokenExpiresAt: (row.meta_social_token_expires_at as string) ?? null,
     webhookSecretEncrypted: (row.webhook_secret_encrypted as string) ?? null,
     archivedAt: (row.archived_at as string) ?? null,
+    rede: redeDaSessao(metadata),
   };
 }
 
@@ -66,7 +68,11 @@ function toSessao(row: Record<string, unknown> | null): SessaoInstagram | null {
 export async function buscarSessaoInstagram(
   admin: SupabaseClient,
   organizationId: string,
+  rede: RedeSocial = "instagram",
 ): Promise<SessaoInstagram | null> {
+  // Uma conexão POR REDE: o Instagram e a página do Facebook da mesma
+  // organização são duas linhas. A rede mora no metadata, e a organização tem
+  // poucas linhas deste provider — o recorte é feito aqui, e não no filtro JSON.
   const { data, error } = await admin
     .from("channel_sessions")
     .select(COLUNAS)
@@ -74,9 +80,12 @@ export async function buscarSessaoInstagram(
     .eq("provider", CHANNEL_PROVIDER_META_SOCIAL)
     .order("archived_at", { ascending: true, nullsFirst: true })
     .order("created_at", { ascending: false })
-    .limit(1);
+    .limit(20);
   if (error) throw new Error(`instagram_session_lookup_failed: ${error.message}`);
-  return toSessao((data as Record<string, unknown>[] | null)?.[0] ?? null);
+  const daRede = ((data as Record<string, unknown>[] | null) ?? []).find(
+    (linha) => redeDaSessao(linha.metadata) === rede,
+  );
+  return toSessao(daRede ?? null);
 }
 
 /**
@@ -92,6 +101,7 @@ export async function gravarSessaoInstagram(
   input: {
     organizationId: string;
     existente: SessaoInstagram | null;
+    rede: RedeSocial;
     accountId: string;
     username: string | null;
     displayName: string;
@@ -128,7 +138,7 @@ export async function gravarSessaoInstagram(
         string,
         unknown
       >),
-      social_platform: REDE_INSTAGRAM,
+      social_platform: input.rede,
       social_username: input.username,
     };
     const r = await reactivateChannelSession(
@@ -142,7 +152,7 @@ export async function gravarSessaoInstagram(
       {
         userId: input.userId,
         requestId: input.requestId,
-        metadata: { provider: CHANNEL_PROVIDER_META_SOCIAL, social_platform: REDE_INSTAGRAM },
+        metadata: { provider: CHANNEL_PROVIDER_META_SOCIAL, social_platform: input.rede },
       },
     );
     return {
@@ -158,7 +168,7 @@ export async function gravarSessaoInstagram(
       ...linha,
       metadata: {
         ...metadataInicialDoCanal(),
-        social_platform: REDE_INSTAGRAM,
+        social_platform: input.rede,
         social_username: input.username,
       },
     })
@@ -186,6 +196,8 @@ export interface CredencialInstagram {
   accountId: string;
   token: string;
   tokenExpiresAt: string | null;
+  /** A rede da conexão: decide o host da Graph em toda chamada. */
+  rede: RedeSocial;
 }
 
 /**
@@ -200,7 +212,7 @@ export async function credencialInstagram(
   if (!lookup.organizationId || !lookup.accountId) return null;
   const { data, error } = await admin
     .from("channel_sessions")
-    .select("id, meta_social_account_id, meta_social_token_encrypted, meta_social_token_expires_at")
+    .select("id, meta_social_account_id, meta_social_token_encrypted, meta_social_token_expires_at, metadata")
     .eq("organization_id", lookup.organizationId)
     .eq("provider", CHANNEL_PROVIDER_META_SOCIAL)
     .eq("meta_social_account_id", lookup.accountId)
@@ -212,6 +224,7 @@ export async function credencialInstagram(
     meta_social_account_id: string;
     meta_social_token_encrypted: string | null;
     meta_social_token_expires_at: string | null;
+    metadata: unknown;
   } | null;
   if (!linha?.meta_social_token_encrypted) return null;
   const token = await decryptWebhookSecret(admin, linha.meta_social_token_encrypted);
@@ -221,6 +234,7 @@ export async function credencialInstagram(
     accountId: linha.meta_social_account_id,
     token,
     tokenExpiresAt: linha.meta_social_token_expires_at,
+    rede: redeDaSessao(linha.metadata),
   };
 }
 
@@ -230,15 +244,26 @@ export async function contaDaSessaoInstagram(
   organizationId: string,
   channelSessionId: string,
 ): Promise<string | null> {
+  return (await contaERedeDaSessao(admin, organizationId, channelSessionId))?.conta ?? null;
+}
+
+/** A conta e a rede desta sessão; `null` quando a sessão não tem conta. */
+export async function contaERedeDaSessao(
+  admin: SupabaseClient,
+  organizationId: string,
+  channelSessionId: string,
+): Promise<{ conta: string; rede: RedeSocial } | null> {
   const { data, error } = await admin
     .from("channel_sessions")
-    .select("meta_social_account_id")
+    .select("meta_social_account_id, metadata")
     .eq("organization_id", organizationId)
     .eq("id", channelSessionId)
     .eq("provider", CHANNEL_PROVIDER_META_SOCIAL)
     .maybeSingle();
   if (error) throw new Error(`instagram_account_lookup_failed: ${error.message}`);
-  return (data as { meta_social_account_id?: string | null } | null)?.meta_social_account_id ?? null;
+  const linha = data as { meta_social_account_id?: string | null; metadata?: unknown } | null;
+  if (!linha?.meta_social_account_id) return null;
+  return { conta: linha.meta_social_account_id, rede: redeDaSessao(linha.metadata) };
 }
 
 /** Grava o token renovado e a validade que a renovação informou. */

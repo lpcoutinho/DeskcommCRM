@@ -191,7 +191,7 @@ export const NAV_CATALOG = [
     // dia a dia, e a barra lateral é de todos.
     href: "/app/comentarios",
     label: "Comentários",
-    description: "O que comentam nas publicações do Instagram, e a resposta em público ou no privado.",
+    description: "O que comentam nas publicações do Instagram e do Facebook, e a resposta em público ou no privado.",
     icon: "ChatCircle",
     group: "atendimento",
   },

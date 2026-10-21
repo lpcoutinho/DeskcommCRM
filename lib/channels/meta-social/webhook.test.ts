@@ -173,7 +173,9 @@ describe("lerWebhookInstagram", () => {
   });
 
   it("objeto de outra rede não é lido; JSON inválido devolve null", () => {
-    expect(lerWebhookInstagram(JSON.stringify({ object: "page", entry: [] }))?.objetoEstranho).toBe(true);
+    expect(lerWebhookInstagram(JSON.stringify({ object: "whatsapp_business_account", entry: [] }))?.objetoEstranho).toBe(
+      true,
+    );
     expect(lerWebhookInstagram("{não é json")).toBeNull();
   });
 
@@ -226,5 +228,81 @@ describe("assinatura e handshake", () => {
     });
     expect(respostaDoHandshakeDeEntrada("meta_social", params, SEGREDO, SESSAO)).toBe("42");
     expect(respostaDoHandshakeDeEntrada("zernio_social", params, SEGREDO, SESSAO)).toBeNull();
+  });
+});
+
+/**
+ * A página do Facebook (Messenger): `object: "page"`, mesma forma de
+ * `messaging[]`, e o comentário em `changes[field=feed]` — formas dos exemplos
+ * da documentação da Plataforma do Messenger e do webhook de página.
+ */
+describe("lerWebhookInstagram — página do Facebook", () => {
+  const PAGINA = "101000000000001";
+  const PSID = "7000000000000001";
+  const daPagina = (entrada: Record<string, unknown>) =>
+    JSON.stringify({ object: "page", entry: [{ id: PAGINA, time: 1761000000000, ...entrada }] });
+
+  it("mensagem do Messenger vira entrada social da rede facebook; eco da página é saída", () => {
+    const l = lerWebhookInstagram(
+      daPagina({
+        messaging: [
+          { sender: { id: PSID }, recipient: { id: PAGINA }, timestamp: 1761000000000, message: { mid: "m.1", text: "oi" } },
+          {
+            sender: { id: PAGINA },
+            recipient: { id: PSID },
+            timestamp: 1761000001000,
+            message: { mid: "m.2", text: "olá!", is_echo: true },
+          },
+        ],
+      }),
+    )!;
+    expect(l.objetoEstranho).toBe(false);
+    expect(l.rede).toBe("facebook");
+    expect(l.mensagens.map((m) => [m.platform, m.direction, m.participantId, m.externalId])).toEqual([
+      ["facebook", "inbound", PSID, `social:${PAGINA}:m.1`],
+      ["facebook", "outbound", PSID, `social:${PAGINA}:m.2`],
+    ]);
+  });
+
+  it("comentário novo na página vira comentário recebido; curtida, edição e a resposta da própria página não", () => {
+    const l = lerWebhookInstagram(
+      daPagina({
+        changes: [
+          {
+            field: "feed",
+            value: {
+              item: "comment",
+              verb: "add",
+              comment_id: `${PAGINA}_900_1`,
+              post_id: `${PAGINA}_900`,
+              parent_id: `${PAGINA}_900`,
+              from: { id: PSID, name: "Maria Silva" },
+              message: "eu quero",
+              created_time: 1761000000,
+            },
+          },
+          { field: "feed", value: { item: "reaction", verb: "add", post_id: `${PAGINA}_900` } },
+          { field: "feed", value: { item: "comment", verb: "edited", comment_id: `${PAGINA}_900_1` } },
+          {
+            field: "feed",
+            value: { item: "comment", verb: "add", comment_id: `${PAGINA}_900_2`, from: { id: PAGINA, name: "Loja" } },
+          },
+        ],
+      }),
+    )!;
+    expect(l.comentarios).toEqual([
+      {
+        accountId: PAGINA,
+        externalId: `${PAGINA}_900_1`,
+        mediaExternalId: `${PAGINA}_900`,
+        mediaProductType: "PAGE_POST",
+        parentExternalId: null,
+        authorExternalId: PSID,
+        authorUsername: "Maria Silva",
+        texto: "eu quero",
+        comentadoEm: new Date(1761000000 * 1000).toISOString(),
+      },
+    ]);
+    expect(l.mudancasIgnoradas).toBe(3);
   });
 });

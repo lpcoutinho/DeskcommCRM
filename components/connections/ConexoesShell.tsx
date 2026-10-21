@@ -63,6 +63,8 @@ export function ConexoesShell({
       ? "sociais"
       : abaParam === "instagram"
       ? "instagram"
+      : abaParam === "facebook"
+      ? "facebook"
       : abaParam === "oficial"
       ? "oficial"
       : abaParam === "parceiro"
@@ -111,6 +113,7 @@ export function ConexoesShell({
         {/* A rede, não o transporte: quem tem o próprio app na Meta reconhece
             "Instagram"; o intermediário mora na aba de redes sociais. */}
         <TabsTrigger value="instagram">Instagram</TabsTrigger>
+        <TabsTrigger value="facebook">Facebook</TabsTrigger>
         <TabsTrigger value="voz">{t("Chamada de voz")}</TabsTrigger>
         {graphParceiro && <TabsTrigger value="graph">{graphParceiro.label}</TabsTrigger>}
       </TabsList>
@@ -124,7 +127,10 @@ export function ConexoesShell({
       </TabsContent>
       <TabsContent value="sociais" className="mt-0"><RedesSociaisClient /></TabsContent>
       <TabsContent value="instagram" className="mt-0">
-        <CanalInstagramClient />
+        <CanalInstagramClient rede="instagram" />
+      </TabsContent>
+      <TabsContent value="facebook" className="mt-0">
+        <CanalInstagramClient rede="facebook" />
       </TabsContent>
 
       <TabsContent value="voz" className="mt-0">

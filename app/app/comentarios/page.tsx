@@ -27,7 +27,7 @@ export default async function Page() {
       <div>
         <h1 className="text-xl font-semibold">{t("Comentários")}</h1>
         <p className="text-sm text-text-muted">
-          {t("O que comentam nas publicações do Instagram conectado. Responda em público ou chame no privado.")}
+          {t("O que comentam nas publicações do Instagram e da página do Facebook conectados. Responda em público ou chame no privado.")}
         </p>
       </div>
       <Comentarios

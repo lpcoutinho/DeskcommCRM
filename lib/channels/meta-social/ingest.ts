@@ -22,9 +22,9 @@ import { logger } from "@/lib/logger";
 
 import type { SocialMessage } from "../social/parser";
 import { ingestZernioInbound } from "../zernio/ingest";
-import { chamarGraphInstagram } from "./graph";
-import { contaDaSessaoInstagram, credencialInstagram } from "./session";
-import { lerWebhookInstagram, REDE_INSTAGRAM, type ComentarioRecebido } from "./webhook";
+import { chamarGraph, type RedeSocial } from "./graph";
+import { contaERedeDaSessao, credencialInstagram } from "./session";
+import { lerWebhookInstagram, type ComentarioRecebido } from "./webhook";
 
 export type DesfechoDaEntradaInstagram =
   | { ok: true; body: Record<string, unknown> }
@@ -41,9 +41,11 @@ export async function corpoEhDaContaDaSessao(
   // JSON inválido segue adiante: quem responde por ele é a entrada, com o código certo.
   if (!leitura) return true;
   if (leitura.objetoEstranho || leitura.contas.length === 0) return false;
-  const conta = await contaDaSessaoInstagram(admin, organizationId, channelSessionId);
+  const sessao = await contaERedeDaSessao(admin, organizationId, channelSessionId);
   // Sessão sem conta RECUSA: "não sei de quem é" não vira "aceito de qualquer um".
-  return conta !== null && leitura.contas.every((c) => c === conta);
+  // E a rede do corpo tem de ser a da conexão: o id da página nunca é o de uma
+  // conta do Instagram, mas a guarda não depende disso.
+  return sessao !== null && leitura.rede === sessao.rede && leitura.contas.every((c) => c === sessao.conta);
 }
 
 /**
@@ -58,6 +60,7 @@ async function completarPerfil(
   organizationId: string,
   msg: SocialMessage,
   token: string | null,
+  rede: RedeSocial,
 ): Promise<SocialMessage> {
   if (!token || msg.direction !== "inbound") return msg;
   const identidade = `${msg.platform}:${msg.accountId}:${msg.participantId}`;
@@ -70,8 +73,9 @@ async function completarPerfil(
     .maybeSingle();
   if (data) return msg;
   try {
-    const perfil = await chamarGraphInstagram(token, encodeURIComponent(msg.participantId), {
-      consulta: { fields: "name,username" },
+    // O perfil de quem escreve para a página não tem @ — só o nome.
+    const perfil = await chamarGraph(rede, token, encodeURIComponent(msg.participantId), {
+      consulta: { fields: rede === "facebook" ? "name" : "name,username" },
     });
     const nome = typeof perfil.name === "string" && perfil.name.trim() ? perfil.name.trim() : null;
     const usuario =
@@ -90,26 +94,30 @@ async function completarPerfil(
 }
 
 /** `rede:conta:autor` — a mesma forma de `contacts.social_identity`. */
-export function identidadeDoAutor(c: Pick<ComentarioRecebido, "accountId" | "authorExternalId">): string | null {
-  return c.authorExternalId ? `${REDE_INSTAGRAM}:${c.accountId}:${c.authorExternalId}` : null;
+export function identidadeDoAutor(
+  c: Pick<ComentarioRecebido, "accountId" | "authorExternalId">,
+  rede: RedeSocial,
+): string | null {
+  return c.authorExternalId ? `${rede}:${c.accountId}:${c.authorExternalId}` : null;
 }
 
 async function gravarComentario(
   admin: SupabaseClient,
   input: { organizationId: string; channelSessionId: string },
   c: ComentarioRecebido,
+  rede: RedeSocial,
 ): Promise<"comentario" | "comentario_repetido"> {
   const { error } = await admin.from("social_comments").insert({
     organization_id: input.organizationId,
     channel_session_id: input.channelSessionId,
-    network: REDE_INSTAGRAM,
+    network: rede,
     account_external_id: c.accountId,
     external_id: c.externalId,
     media_external_id: c.mediaExternalId,
     media_product_type: c.mediaProductType,
     parent_external_id: c.parentExternalId,
     author_external_id: c.authorExternalId,
-    author_identity: identidadeDoAutor(c),
+    author_identity: identidadeDoAutor(c, rede),
     author_username: c.authorUsername,
     body: c.texto,
     ...(c.comentadoEm ? { commented_at: c.comentadoEm } : {}),
@@ -164,7 +172,12 @@ export async function ingerirWebhookInstagram(
     return { ok: true, body: { status: "ignored", reason: "objeto_de_outra_rede" } };
   }
 
-  const conta = await contaDaSessaoInstagram(admin, input.organizationId, input.channelSessionId);
+  const sessao = await contaERedeDaSessao(admin, input.organizationId, input.channelSessionId);
+  if (sessao && leitura.rede !== sessao.rede) {
+    return { ok: true, body: { status: "ignored", reason: "objeto_de_outra_rede" } };
+  }
+  const conta = sessao?.conta ?? null;
+  const rede = sessao?.rede ?? leitura.rede;
   const desfechos: string[] = [];
 
   const daSessao = leitura.mensagens.filter((m) => m.accountId === conta);
@@ -178,7 +191,7 @@ export async function ingerirWebhookInstagram(
       desfechos.push("outra_conta");
       continue;
     }
-    let msg = await completarPerfil(admin, input.organizationId, bruta, token);
+    let msg = await completarPerfil(admin, input.organizationId, bruta, token, rede);
     const daAutomacao =
       msg.direction === "outbound" ? await ecoDaRespostaPrivada(admin, input.organizationId, msg) : null;
     if (daAutomacao?.autor) {
@@ -202,7 +215,7 @@ export async function ingerirWebhookInstagram(
       desfechos.push("outra_conta");
       continue;
     }
-    desfechos.push(await gravarComentario(admin, input, comentario));
+    desfechos.push(await gravarComentario(admin, input, comentario, rede));
   }
 
   // Leitura: o cliente VIU. Não rebaixa nada (é o último estado), e mensagem

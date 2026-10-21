@@ -24,7 +24,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 
 import { ErroDePublicacao } from "../publicacao";
 import type { PublicacaoInput, PublicacaoResultado } from "../types";
-import { chamarGraphInstagram, ErroDaGraphInstagram } from "./graph";
+import { chamarGraph, chamarGraphInstagram, ErroDaGraphInstagram } from "./graph";
+import type { CredencialInstagram } from "./session";
 import { credencialInstagram } from "./session";
 
 /** Quantas vezes conferir o container dentro de UMA rodada, e o intervalo. */
@@ -175,8 +176,9 @@ export async function publicarNoInstagram(
     accountId: input.sessionRef,
   });
   if (!cred) {
-    throw new ErroDePublicacao("A conta não está conectada: reconecte em Conexões › Instagram.", true);
+    throw new ErroDePublicacao("A conta não está conectada: reconecte em Conexões.", true);
   }
+  if (cred.rede === "facebook") return publicarNaPagina(cred, input);
   const conta = cred.accountId;
 
   let containerId = input.containerId;
@@ -229,4 +231,108 @@ export async function publicarNoInstagram(
       ? new ErroDePublicacao(erro.message, erro.definitivo, containerId)
       : erro;
   }
+}
+
+// ─── Página do Facebook ──────────────────────────────────────────────────────
+//
+// A página não tem container: `POST /<página>/photos` (ou `/videos`, ou `/feed`
+// com fotos anexadas) PUBLICA na mesma chamada. Por isso a regra de erro muda:
+// depois que essa chamada saiu, falha sem resposta clara (rede caída, prazo,
+// 5xx) NÃO volta para a fila — o post pode ter saído, e publicar em dobro é
+// pior que não publicar. Só o que a Meta RECUSOU antes de publicar (limite de
+// chamadas) é passageiro.
+
+/** Códigos de limite da Graph: a chamada foi recusada, nada saiu. */
+const LIMITES_DA_GRAPH = new Set([4, 17, 32, 613]);
+
+function erroDaChamadaQuePublica(e: unknown): ErroDePublicacao {
+  if (e instanceof ErroDaGraphInstagram) {
+    if (e.tokenInvalido) {
+      return new ErroDePublicacao("O token da página não vale mais: reconecte em Conexões › Facebook.", true);
+    }
+    if (e.codigo !== null && LIMITES_DA_GRAPH.has(e.codigo)) return new ErroDePublicacao(e.message, false);
+    if (e.status === null || e.status >= 500) {
+      return new ErroDePublicacao(
+        "A Meta não confirmou a publicação: confira na página antes de publicar de novo.",
+        true,
+      );
+    }
+    return new ErroDePublicacao(e.message, true);
+  }
+  return new ErroDePublicacao(
+    "A Meta não confirmou a publicação: confira na página antes de publicar de novo.",
+    true,
+  );
+}
+
+async function linkDaPagina(token: string, id: string): Promise<string | null> {
+  try {
+    const r = await chamarGraph("facebook", token, encodeURIComponent(id), { consulta: { fields: "permalink_url" } });
+    const link = texto(r.permalink_url);
+    // Link relativo (vídeo às vezes vem assim) fica sem link: montar o host aqui
+    // seria endereço de terceiro escrito no código, e o link é só enfeite.
+    return link?.startsWith("https://") ? link : null;
+  } catch {
+    return null;
+  }
+}
+
+async function publicarNaPagina(cred: CredencialInstagram, input: PublicacaoInput): Promise<PublicacaoResultado> {
+  const pagina = encodeURIComponent(cred.accountId);
+  const [primeira] = input.midias;
+  if (!primeira) throw new ErroDePublicacao("O post não tem mídia.", true);
+  if (input.formato === "story" || input.formato === "reel") {
+    throw new ErroDePublicacao("A página do Facebook publica imagem, vídeo e carrossel de fotos; troque o formato.", true);
+  }
+  if (input.formato === "carrossel" && input.midias.some((m) => m.tipo !== "imagem")) {
+    throw new ErroDePublicacao("Na página do Facebook o carrossel é só de fotos.", true);
+  }
+
+  // Carrossel: as fotos sobem SEM publicar (não aparecem para ninguém) e o
+  // post é um só, com elas anexadas. Falhar aqui não publica nada.
+  const anexadas: string[] = [];
+  if (input.formato === "carrossel") {
+    try {
+      for (const m of input.midias) {
+        const r = await chamarGraph("facebook", cred.token, `${pagina}/photos`, {
+          metodo: "POST",
+          corpo: { url: m.url, published: false },
+        });
+        const fotoId = texto(r.id);
+        if (!fotoId) throw new ErroDePublicacao("A Meta não devolveu a foto do carrossel.", false);
+        anexadas.push(fotoId);
+      }
+    } catch (e) {
+      throw paraErroDePublicacao(e);
+    }
+  }
+
+  let resposta: Record<string, unknown>;
+  try {
+    if (input.formato === "carrossel") {
+      resposta = await chamarGraph("facebook", cred.token, `${pagina}/feed`, {
+        metodo: "POST",
+        corpo: { message: input.legenda, attached_media: anexadas.map((id) => ({ media_fbid: id })) },
+      });
+    } else if (primeira.tipo === "video") {
+      resposta = await chamarGraph("facebook", cred.token, `${pagina}/videos`, {
+        metodo: "POST",
+        corpo: { file_url: primeira.url, description: input.legenda },
+      });
+    } else {
+      resposta = await chamarGraph("facebook", cred.token, `${pagina}/photos`, {
+        metodo: "POST",
+        corpo: { url: primeira.url, caption: input.legenda },
+      });
+    }
+  } catch (e) {
+    throw erroDaChamadaQuePublica(e);
+  }
+
+  // Foto devolve `post_id` (o post) além do `id` (a foto); vídeo e feed, `id`.
+  const idExterno = texto(resposta.post_id) ?? texto(resposta.id);
+  if (!idExterno) {
+    throw new ErroDePublicacao("A Meta não confirmou a publicação: confira na página antes de publicar de novo.", true);
+  }
+  return { estado: "publicado", idExterno, link: await linkDaPagina(cred.token, idExterno) };
 }

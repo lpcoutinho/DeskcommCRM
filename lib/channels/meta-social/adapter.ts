@@ -25,7 +25,7 @@ import { CHANNEL_PROVIDER_META_SOCIAL } from "../capabilities";
 import { socialMessageId } from "../social/catalog";
 import type { ChannelAdapter, ChannelHealth, OutboundEnvelope } from "../types";
 import { responderComentarioNoInstagram, responderComentarioNoPrivadoDoInstagram } from "./comentarios";
-import { chamarGraphInstagram, ErroDaGraphInstagram } from "./graph";
+import { chamarGraph, ErroDaGraphInstagram, nomeDaRede, redeDaSessao } from "./graph";
 import { publicarNoInstagram } from "./publicacao";
 import { credencialInstagram } from "./session";
 
@@ -98,6 +98,11 @@ export const metaSocialAdapter: ChannelAdapter = {
 
   // Publicar no perfil (feed, reels, stories) — ver `./publicacao.ts`.
   publicarConteudo: (input) => publicarNoInstagram(input),
+  // A página do Facebook não tem reels nem story pela API de publicação dela.
+  formatosQuePublica: (metadata) =>
+    redeDaSessao(metadata) === "facebook"
+      ? ["imagem", "video", "carrossel"]
+      : ["imagem", "video", "carrossel", "reel", "story"],
 
   // Responder comentário em público e no privado — ver `./comentarios.ts`.
   responderComentario: (input) => responderComentarioNoInstagram(input),
@@ -110,7 +115,8 @@ export const metaSocialAdapter: ChannelAdapter = {
     });
     if (!cred) return { reachable: true, status: "FAILED", detail: "credencial_indisponivel" };
     try {
-      await chamarGraphInstagram(cred.token, "me", { consulta: { fields: "user_id" } });
+      // `id` existe nos dois nós (conta do Instagram e página do Facebook).
+      await chamarGraph(cred.rede, cred.token, "me", { consulta: { fields: "id" } });
       return { reachable: true, status: "WORKING", detail: null };
     } catch (e) {
       if (e instanceof ErroDaGraphInstagram && e.tokenInvalido) {
@@ -157,17 +163,17 @@ export const metaSocialAdapter: ChannelAdapter = {
 
   async send(envelope) {
     if (!envelope.providerConversationId) {
-      throw new Error("Aguarde uma mensagem do cliente para responder no Instagram.");
+      throw new Error("Aguarde uma mensagem do cliente para responder por esta conexão.");
     }
     const anexo = envelope.media ? tipoDeAnexo(envelope.kind) : null;
     if (envelope.kind !== "text" && !anexo) {
-      throw new Error("Este tipo de mensagem ainda não é suportado no Instagram.");
+      throw new Error("Este tipo de mensagem ainda não é suportado nesta conexão.");
     }
     // A API do Instagram não tem legenda: anexo e texto são duas mensagens, e a
     // segunda voltaria pelo webhook como um envio feito FORA do CRM — pausando a
     // IA como se uma pessoa tivesse respondido. Recusar é honesto; a tela orienta.
     if (anexo && envelope.media?.caption?.trim()) {
-      throw new Error("No Instagram a legenda não vai junto do anexo: envie o texto numa mensagem separada.");
+      throw new Error("Nesta rede a legenda não vai junto do anexo: envie o texto numa mensagem separada.");
     }
 
     const cred = await credencialInstagram(createAdminClient(), {
@@ -175,7 +181,7 @@ export const metaSocialAdapter: ChannelAdapter = {
       accountId: envelope.sessionRef,
     });
     if (!cred) {
-      throw new Error(`${NAO_CONFIGURADO}: reconecte a conta em Conexões › Instagram.`);
+      throw new Error(`${NAO_CONFIGURADO}: reconecte a conta em Conexões.`);
     }
 
     const message =
@@ -184,16 +190,20 @@ export const metaSocialAdapter: ChannelAdapter = {
         : { text: envelope.body ?? "" };
 
     await envelope.beforeSend?.();
-    const resposta = await chamarGraphInstagram(cred.token, "me/messages", {
+    const resposta = await chamarGraph(cred.rede, cred.token, "me/messages", {
       metodo: "POST",
       corpo: {
         recipient: { id: envelope.providerConversationId },
         message,
+        // O Messenger exige o tipo do envio; dentro da janela de 24h é resposta.
+        ...(cred.rede === "facebook" ? { messaging_type: "RESPONSE" } : {}),
       },
     });
     const mid = typeof resposta.message_id === "string" ? resposta.message_id : null;
     if (!mid) {
-      throw new Error("Envio sem confirmação do Instagram. Confira a conversa antes de tentar novamente.");
+      throw new Error(
+        `Envio sem confirmação do ${nomeDaRede(cred.rede)}. Confira a conversa antes de tentar novamente.`,
+      );
     }
     return { externalId: socialMessageId(cred.accountId, mid) };
   },

@@ -36,6 +36,7 @@ interface Conta {
   id: string;
   nome: string;
   rede: string;
+  formatos: Formato[];
 }
 
 interface Post {
@@ -112,6 +113,7 @@ function NovoPost({ contas, aoSalvar }: { contas: Conta[]; aoSalvar: () => void 
     reel: t("Reels"),
     story: t("Story"),
   };
+  const formatosDaConta = contas.find((c) => c.id === conta)?.formatos;
   const problema = midias.length > 0 ? conferirFormato(formato, midias) : null;
 
   const subir = async (arquivos: FileList | null) => {
@@ -183,7 +185,12 @@ function NovoPost({ contas, aoSalvar }: { contas: Conta[]; aoSalvar: () => void 
           <select
             id="pub-conta"
             value={conta}
-            onChange={(e) => setConta(e.target.value)}
+            onChange={(e) => {
+              setConta(e.target.value);
+              // Trocar para uma conta que não publica o formato escolhido volta para imagem.
+              const daNova = contas.find((c) => c.id === e.target.value)?.formatos;
+              if (daNova && !daNova.includes(formato)) setFormato("imagem");
+            }}
             className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
           >
             {contas.map((c) => (
@@ -201,7 +208,10 @@ function NovoPost({ contas, aoSalvar }: { contas: Conta[]; aoSalvar: () => void 
             onChange={(e) => setFormato(e.target.value as Formato)}
             className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
           >
-            {(Object.keys(nomesDosFormatos) as Formato[]).map((f) => (
+            {(Object.keys(nomesDosFormatos) as Formato[])
+              // Só o que a conta escolhida publica (a página do Facebook não tem story).
+              .filter((f) => !formatosDaConta || formatosDaConta.includes(f))
+              .map((f) => (
               <option key={f} value={f}>
                 {nomesDosFormatos[f]}
               </option>
@@ -350,7 +360,7 @@ export function Publicacoes({ podeGerenciar }: { podeGerenciar: boolean }) {
         <Card className="flex flex-col gap-2 p-4">
           <p className="text-sm font-medium">{t("Nenhuma conta que publica está conectada.")}</p>
           <p className="text-xs text-muted-foreground">
-            {t("Conecte a conta profissional do Instagram em Conexões › Instagram para agendar posts.")}
+            {t("Conecte a conta profissional do Instagram ou a página do Facebook em Conexões para agendar posts.")}
           </p>
           <Link href="/app/connections?aba=instagram" className="text-sm font-medium text-primary hover:underline">
             {t("Abrir Conexões")}

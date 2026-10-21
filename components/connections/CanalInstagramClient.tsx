@@ -15,7 +15,10 @@ import { useT } from "@/hooks/i18n/useT";
 import { ChannelAiAccess } from "./ChannelAiAccess";
 
 /**
- * Conectar o Instagram pela API da Meta, com o app da própria empresa.
+ * Conectar o Instagram ou a página do Facebook (Messenger) pela API da Meta,
+ * com o app da própria empresa. Um componente para as duas redes: o fluxo é o
+ * mesmo, e o que muda (o passo a passo, o tipo de token, os textos) vem de
+ * `rede`.
  *
  * Quem chega aqui quase nunca criou um app na Meta antes. Por isso a tela
  * começa pelo PASSO A PASSO, e não pelo formulário: um campo "chave secreta do
@@ -30,8 +33,7 @@ import { ChannelAiAccess } from "./ChannelAiAccess";
  *    que resolve (ou os dois valores para colar no painel).
  */
 
-const ROTA = "/api/v1/channels/instagram";
-const CHAVE = ["canal-instagram"];
+type Rede = "instagram" | "facebook";
 
 interface Estado {
   connected: boolean;
@@ -74,23 +76,36 @@ function ParaColar({ rotulo, valor }: { rotulo: string; valor: string }) {
 }
 
 /** O passo a passo da Meta, na ordem em que o painel pede. */
-function PassoAPasso() {
+function PassoAPasso({ rede }: { rede: Rede }) {
   const t = useT();
+  const facebook = rede === "facebook";
   const passos = [
     {
       titulo: t("Crie um app na Meta"),
-      texto: t(
-        "Em developers.facebook.com, clique em Criar app e escolha o caso de uso de mensagens e conteúdo do Instagram. O app é da sua empresa: nenhum dado passa por terceiros.",
-      ),
+      texto: facebook
+        ? t(
+            "Em developers.facebook.com, clique em Criar app e escolha o caso de uso de mensagens do Messenger. O app é da sua empresa: nenhum dado passa por terceiros.",
+          )
+        : t(
+            "Em developers.facebook.com, clique em Criar app e escolha o caso de uso de mensagens e conteúdo do Instagram. O app é da sua empresa: nenhum dado passa por terceiros.",
+          ),
       link: "https://developers.facebook.com/apps",
     },
-    {
-      titulo: t("Ligue a sua conta do Instagram ao app"),
-      texto: t(
-        "No app, abra a configuração da API com login do Instagram, adicione a sua conta (ela precisa ser profissional: Empresa ou Criador de conteúdo) e gere o token de acesso.",
-      ),
-      link: null,
-    },
+    facebook
+      ? {
+          titulo: t("Ligue a sua página do Facebook ao app"),
+          texto: t(
+            "No app, abra a configuração da API do Messenger, conecte a página e gere o token de acesso DA PÁGINA — não o de usuário. Gerado a partir de um token de usuário de longa duração, ele não expira.",
+          ),
+          link: null,
+        }
+      : {
+          titulo: t("Ligue a sua conta do Instagram ao app"),
+          texto: t(
+            "No app, abra a configuração da API com login do Instagram, adicione a sua conta (ela precisa ser profissional: Empresa ou Criador de conteúdo) e gere o token de acesso.",
+          ),
+          link: null,
+        },
     {
       titulo: t("Copie a chave secreta do app"),
       texto: t(
@@ -107,15 +122,19 @@ function PassoAPasso() {
     },
     {
       titulo: t("Ligue o recebimento e publique o app"),
-      texto: t(
-        "Depois de conectar, configure o webhook com o botão desta tela (ou à mão no painel) e deixe o app no modo Ativo: a Meta só entrega mensagens de app publicado. Para atender contas que não têm papel no app, a Meta exige a análise do app (acesso avançado).",
-      ),
+      texto: facebook
+        ? t(
+            "Depois de conectar, configure o webhook com o botão desta tela (ou à mão no painel) e deixe o app no modo Ativo: a Meta só entrega mensagens de app publicado. Para atender quem não tem papel no app, a Meta exige a análise das permissões de mensagens e de comentários da página.",
+          )
+        : t(
+            "Depois de conectar, configure o webhook com o botão desta tela (ou à mão no painel) e deixe o app no modo Ativo: a Meta só entrega mensagens de app publicado. Para atender contas que não têm papel no app, a Meta exige a análise do app (acesso avançado).",
+          ),
       link: null,
     },
   ];
 
   return (
-    <Card className="flex flex-col gap-3 p-4" data-testid="instagram-passo-a-passo">
+    <Card className="flex flex-col gap-3 p-4" data-testid={`${rede}-passo-a-passo`}>
       <div>
         <h3 className="text-sm font-semibold">{t("Passo a passo")}</h3>
         <p className="text-xs text-muted-foreground">
@@ -149,8 +168,11 @@ function PassoAPasso() {
   );
 }
 
-export function CanalInstagramClient() {
+export function CanalInstagramClient({ rede = "instagram" }: { rede?: Rede }) {
   const t = useT();
+  const facebook = rede === "facebook";
+  const ROTA = `/api/v1/channels/${rede}`;
+  const CHAVE = ["canal-social", rede];
   const qc = useQueryClient();
   // Falha de leitura não trava a tela: sem estado, o formulário continua servindo.
   const { data: estado = null } = useQuery({
@@ -174,7 +196,8 @@ export function CanalInstagramClient() {
       // Os segredos saem da memória da tela assim que gravados: não voltam num GET.
       setToken("");
       setSegredo("");
-      if (r.data.account_subscribed) toast.success(t("Conta do Instagram conectada."));
+      if (r.data.account_subscribed)
+        toast.success(facebook ? t("Página do Facebook conectada.") : t("Conta do Instagram conectada."));
       else
         toast.warning(
           t("Conta conectada, mas a Meta não ligou o recebimento de mensagens desta conta."),
@@ -201,17 +224,23 @@ export function CanalInstagramClient() {
   };
 
   return (
-    <div className="flex flex-col gap-4" data-testid="canal-instagram">
-      {!conectado && <PassoAPasso />}
+    <div className="flex flex-col gap-4" data-testid={`canal-${rede}`}>
+      {!conectado && <PassoAPasso rede={rede} />}
 
       <Card className="flex flex-col gap-4 p-4">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h3 className="text-sm font-semibold">{t("Instagram pela API da Meta")}</h3>
+            <h3 className="text-sm font-semibold">
+              {facebook ? t("Facebook (Messenger) pela API da Meta") : t("Instagram pela API da Meta")}
+            </h3>
             <p className="text-xs text-muted-foreground">
-              {t(
-                "As mensagens diretas da sua conta profissional entram na caixa de entrada, com a IA e a equipe respondendo como no WhatsApp.",
-              )}
+              {facebook
+                ? t(
+                    "As mensagens da sua página entram na caixa de entrada, com a IA e a equipe respondendo como no WhatsApp. Os comentários das publicações aparecem em Comentários.",
+                  )
+                : t(
+                    "As mensagens diretas da sua conta profissional entram na caixa de entrada, com a IA e a equipe respondendo como no WhatsApp.",
+                  )}
             </p>
           </div>
           {conectado ? (
@@ -240,20 +269,20 @@ export function CanalInstagramClient() {
         {estado?.channel_session_id && <ChannelAiAccess channelId={estado.channel_session_id} />}
 
         <div className="flex flex-col gap-1.5">
-          <Label htmlFor="instagram-token">{t("Token de acesso")}</Label>
+          <Label htmlFor={`${rede}-token`}>{facebook ? t("Token de acesso da página") : t("Token de acesso")}</Label>
           <Input
-            id="instagram-token"
+            id={`${rede}-token`}
             type="password"
             value={token}
             onChange={(e) => setToken(e.target.value)}
-            placeholder={estado?.has_token ? t("gravada — preencha para trocar") : "IGAA…"}
+            placeholder={estado?.has_token ? t("gravada — preencha para trocar") : facebook ? "EAA…" : "IGAA…"}
             autoComplete="off"
           />
         </div>
         <div className="flex flex-col gap-1.5">
-          <Label htmlFor="instagram-segredo">{t("Chave secreta do app")}</Label>
+          <Label htmlFor={`${rede}-segredo`}>{t("Chave secreta do app")}</Label>
           <Input
-            id="instagram-segredo"
+            id={`${rede}-segredo`}
             type="password"
             value={segredo}
             onChange={(e) => setSegredo(e.target.value)}
@@ -283,21 +312,25 @@ export function CanalInstagramClient() {
 
       {/* Só depois de conectar: antes disso não há URL nem token de verificação. */}
       {conectado && estado?.webhook_url && estado.verify_token && (
-        <Card className="flex flex-col gap-4 p-4" data-testid="instagram-webhook">
+        <Card className="flex flex-col gap-4 p-4" data-testid={`${rede}-webhook`}>
           <div>
             <h3 className="text-sm font-semibold">{t("Receber as mensagens")}</h3>
             <p className="text-xs text-muted-foreground">
-              {t(
-                "A Meta precisa saber para onde entregar as mensagens do Instagram. Sem isto o CRM envia, mas a mensagem do cliente não chega.",
-              )}
+              {facebook
+                ? t(
+                    "A Meta precisa saber para onde entregar as mensagens da página. Sem isto o CRM envia, mas a mensagem do cliente não chega.",
+                  )
+                : t(
+                    "A Meta precisa saber para onde entregar as mensagens do Instagram. Sem isto o CRM envia, mas a mensagem do cliente não chega.",
+                  )}
             </p>
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="instagram-app-id">{t("ID do app")}</Label>
+            <Label htmlFor={`${rede}-app-id`}>{t("ID do app")}</Label>
             <div className="flex flex-wrap items-center gap-2">
               <Input
-                id="instagram-app-id"
+                id={`${rede}-app-id`}
                 className="max-w-xs"
                 inputMode="numeric"
                 value={appId}
@@ -314,17 +347,25 @@ export function CanalInstagramClient() {
               </Button>
             </div>
             <p className="text-xs text-muted-foreground">
-              {t(
-                "Atenção: um app tem um endereço só para o Instagram. Se outra automação já recebe por este app, ela deixa de receber.",
-              )}
+              {facebook
+                ? t(
+                    "Atenção: um app tem um endereço só para as páginas. Se outra automação já recebe por este app, ela deixa de receber.",
+                  )
+                : t(
+                    "Atenção: um app tem um endereço só para o Instagram. Se outra automação já recebe por este app, ela deixa de receber.",
+                  )}
             </p>
           </div>
 
           <div className="flex flex-col gap-3 border-t border-border pt-3">
             <p className="text-xs text-muted-foreground">
-              {t(
-                "Prefere fazer à mão? No painel do app, em Webhooks do Instagram, cole os dois valores abaixo e assine os campos messages, messaging_seen, messaging_referral e comments.",
-              )}
+              {facebook
+                ? t(
+                    "Prefere fazer à mão? No painel do app, em Webhooks da página, cole os dois valores abaixo e assine os campos messages, message_echoes, message_reads, messaging_referrals e feed.",
+                  )
+                : t(
+                    "Prefere fazer à mão? No painel do app, em Webhooks do Instagram, cole os dois valores abaixo e assine os campos messages, messaging_seen, messaging_referral e comments.",
+                  )}
             </p>
             <ParaColar rotulo={t("URL do webhook")} valor={estado.webhook_url} />
             <ParaColar rotulo={t("Token de verificação")} valor={estado.verify_token} />

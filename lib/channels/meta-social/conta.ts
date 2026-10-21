@@ -18,10 +18,32 @@
  * tela (`configurarWebhookDoApp`, que exige o id do app) ou à mão no painel.
  */
 import { graphBaseUrl } from "../meta/graph-base";
-import { chamarGraphInstagram, ErroDaGraphInstagram } from "./graph";
+import { chamarGraph, chamarGraphInstagram, ErroDaGraphInstagram, nomeDaRede, type RedeSocial } from "./graph";
 
 /** Os campos que este canal consome hoje. Assinar o que ninguém lê é ruído. */
 export const CAMPOS_DO_WEBHOOK = ["messages", "messaging_seen", "messaging_referral", "comments"] as const;
+
+/**
+ * Os mesmos fatos na página do Facebook (Messenger), com os nomes de lá: o eco
+ * é um campo próprio (`message_echoes`), a leitura é `message_reads`, e o
+ * comentário chega dentro de `feed`.
+ */
+export const CAMPOS_DO_WEBHOOK_DA_PAGINA = [
+  "messages",
+  "message_echoes",
+  "message_reads",
+  "messaging_referrals",
+  "feed",
+] as const;
+
+export function camposDoWebhook(rede: RedeSocial): readonly string[] {
+  return rede === "facebook" ? CAMPOS_DO_WEBHOOK_DA_PAGINA : CAMPOS_DO_WEBHOOK;
+}
+
+/** O `object` do webhook do app para a rede. */
+export function objetoDoWebhook(rede: RedeSocial): "instagram" | "page" {
+  return rede === "facebook" ? "page" : "instagram";
+}
 
 export type ValidacaoDaConta =
   | {
@@ -38,10 +60,37 @@ function texto(v: unknown): string | null {
   return typeof v === "string" && v.trim() ? v.trim() : null;
 }
 
+/**
+ * O token da PÁGINA serve, e de qual página ele é? `category` só existe em
+ * página: o token de USUÁRIO (o erro mais comum, porque é o primeiro que o
+ * painel mostra) é recusado aqui com a frase certa, em vez de conectar e não
+ * receber nada.
+ */
+async function validarPagina(t: string): Promise<ValidacaoDaConta> {
+  try {
+    const eu = await chamarGraph("facebook", t, "me", { consulta: { fields: "id,name,category" } });
+    const accountId = texto(eu.id);
+    if (!accountId || !texto(eu.category)) {
+      return { ok: false, motivo: "Use o token da PÁGINA, não o token de usuário." };
+    }
+    return { ok: true, accountId, username: null, nome: texto(eu.name), tipoDeConta: "PAGE" };
+  } catch (e) {
+    if (e instanceof ErroDaGraphInstagram) {
+      if (e.status === null) return { ok: false, motivo: e.message };
+      if (e.tokenInvalido) return { ok: false, motivo: "Token recusado pelo Facebook." };
+      // 100 = campo inexistente: é token de usuário pedindo `category`.
+      if (e.codigo === 100) return { ok: false, motivo: "Use o token da PÁGINA, não o token de usuário." };
+      return { ok: false, motivo: `O Facebook recusou: ${e.message}` };
+    }
+    throw e;
+  }
+}
+
 /** O token serve, e de qual conta ele é? */
-export async function validarConta(token: string): Promise<ValidacaoDaConta> {
+export async function validarConta(token: string, rede: RedeSocial = "instagram"): Promise<ValidacaoDaConta> {
   const t = token.trim();
-  if (!t) return { ok: false, motivo: "Informe o token de acesso do Instagram." };
+  if (!t) return { ok: false, motivo: `Informe o token de acesso do ${nomeDaRede(rede)}.` };
+  if (rede === "facebook") return validarPagina(t);
   try {
     const eu = await chamarGraphInstagram(t, "me", {
       consulta: { fields: "user_id,username,name,account_type" },
@@ -73,13 +122,14 @@ export async function validarConta(token: string): Promise<ValidacaoDaConta> {
  * A conta pede para receber os eventos do app. Idempotente na Meta: repetir
  * devolve `success: true` de novo. LANÇA `ErroDaGraphInstagram` em falha.
  */
-export async function assinarWebhooksDaConta(token: string): Promise<void> {
-  const r = await chamarGraphInstagram(token, "me/subscribed_apps", {
+export async function assinarWebhooksDaConta(token: string, rede: RedeSocial = "instagram"): Promise<void> {
+  // Com o token da página, `me` É a página — a mesma chamada nas duas redes.
+  const r = await chamarGraph(rede, token, "me/subscribed_apps", {
     metodo: "POST",
-    consulta: { subscribed_fields: CAMPOS_DO_WEBHOOK.join(",") },
+    consulta: { subscribed_fields: camposDoWebhook(rede).join(",") },
   });
   if (r.success !== true) {
-    throw new ErroDaGraphInstagram("O Instagram não confirmou a assinatura da conta.", 200, null);
+    throw new ErroDaGraphInstagram(`O ${nomeDaRede(rede)} não confirmou a assinatura da conta.`, 200, null);
   }
 }
 
@@ -121,12 +171,14 @@ export async function configurarWebhookDoApp(input: {
   segredoDoApp: string;
   callbackUrl: string;
   tokenDeVerificacao: string;
+  rede?: RedeSocial;
 }): Promise<{ ok: true } | { ok: false; motivo: string }> {
+  const rede = input.rede ?? "instagram";
   const corpo = new URLSearchParams({
-    object: "instagram",
+    object: objetoDoWebhook(rede),
     callback_url: input.callbackUrl,
     verify_token: input.tokenDeVerificacao,
-    fields: CAMPOS_DO_WEBHOOK.join(","),
+    fields: camposDoWebhook(rede).join(","),
     include_values: "true",
     access_token: `${input.appId}|${input.segredoDoApp}`,
   });

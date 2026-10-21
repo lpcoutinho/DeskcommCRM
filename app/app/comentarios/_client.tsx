@@ -96,7 +96,7 @@ export function Comentarios({ podeResponder, podeAutomatizar }: { podeResponder:
           <p className="text-sm font-medium">{t("Nenhum comentário ainda.")}</p>
           <p className="text-xs text-muted-foreground">
             {t(
-              "Os comentários chegam pela conexão do Instagram. Se a conta já está conectada e nada aparece, confira se o webhook assina o campo comments.",
+              "Os comentários chegam pela conexão do Instagram ou da página do Facebook. Se a conta já está conectada e nada aparece, confira se o webhook assina o campo de comentários (comments no Instagram, feed na página).",
             )}
           </p>
           <Link href="/app/connections?aba=instagram" className="text-sm font-medium text-primary hover:underline">

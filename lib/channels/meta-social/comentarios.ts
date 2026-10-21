@@ -1,5 +1,8 @@
 /**
- * Instagram nativo — responder comentário, em público e no privado.
+ * Rede social pela Meta — responder comentário, em público e no privado.
+ *
+ * Instagram e página do Facebook têm o mesmo contrato; muda o host (pela rede
+ * da credencial) e o nome da resposta pública (`replies` × `comments`).
  *
  * ─── Em público ─────────────────────────────────────────────────────────────
  *
@@ -21,19 +24,19 @@ import { createAdminClient } from "@/lib/supabase/admin";
 
 import { socialMessageId } from "../social/catalog";
 import type { RespostaDeComentarioInput } from "../types";
-import { chamarGraphInstagram } from "./graph";
+import { chamarGraph, type RedeSocial } from "./graph";
 import { credencialInstagram } from "./session";
 
 /** O que a Meta aceita numa resposta de comentário (limite da API de comentários). */
 export const LIMITE_DA_RESPOSTA_DE_COMENTARIO = 2200;
 
-async function tokenDaConta(input: RespostaDeComentarioInput): Promise<string> {
+async function tokenDaConta(input: RespostaDeComentarioInput): Promise<{ token: string; rede: RedeSocial }> {
   const cred = await credencialInstagram(createAdminClient(), {
     organizationId: input.organizationId,
     accountId: input.sessionRef,
   });
-  if (!cred) throw new Error("A conta do Instagram não está conectada: reconecte em Conexões › Instagram.");
-  return cred.token;
+  if (!cred) throw new Error("A conta não está conectada: reconecte em Conexões.");
+  return { token: cred.token, rede: cred.rede ?? "instagram" };
 }
 
 function textoValido(texto: string): string {
@@ -49,8 +52,10 @@ export async function responderComentarioNoInstagram(
   input: RespostaDeComentarioInput,
 ): Promise<{ externalId: string }> {
   const message = textoValido(input.texto);
-  const token = await tokenDaConta(input);
-  const r = await chamarGraphInstagram(token, `${encodeURIComponent(input.commentExternalId)}/replies`, {
+  const { token, rede } = await tokenDaConta(input);
+  // Mesma resposta, nome diferente: no Instagram é `replies`, na página é `comments`.
+  const caminho = rede === "facebook" ? "comments" : "replies";
+  const r = await chamarGraph(rede, token, `${encodeURIComponent(input.commentExternalId)}/${caminho}`, {
     metodo: "POST",
     corpo: { message },
   });
@@ -63,8 +68,8 @@ export async function responderComentarioNoPrivadoDoInstagram(
   input: RespostaDeComentarioInput,
 ): Promise<{ externalId: string; participantId: string | null }> {
   const text = textoValido(input.texto);
-  const token = await tokenDaConta(input);
-  const r = await chamarGraphInstagram(token, "me/messages", {
+  const { token, rede } = await tokenDaConta(input);
+  const r = await chamarGraph(rede, token, "me/messages", {
     metodo: "POST",
     corpo: { recipient: { comment_id: input.commentExternalId }, message: { text } },
   });

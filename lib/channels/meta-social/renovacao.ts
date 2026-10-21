@@ -23,6 +23,7 @@ import { decryptWebhookSecret, encryptWebhookSecret } from "@/lib/webhooks/secre
 
 import { CHANNEL_PROVIDER_META_SOCIAL } from "../capabilities";
 import { renovarToken } from "./conta";
+import { redeDaSessao } from "./graph";
 import { ErroDaGraphInstagram } from "./graph";
 import { gravarTokenRenovado } from "./session";
 
@@ -48,7 +49,7 @@ export async function renovarTokensDoInstagram(
 ): Promise<ResultadoDaRenovacao[]> {
   const { data, error } = await admin
     .from("channel_sessions")
-    .select("id, organization_id, meta_social_token_encrypted, meta_social_token_expires_at")
+    .select("id, organization_id, meta_social_token_encrypted, meta_social_token_expires_at, metadata")
     .eq("provider", CHANNEL_PROVIDER_META_SOCIAL)
     .is("archived_at", null)
     .not("meta_social_token_encrypted", "is", null);
@@ -60,7 +61,11 @@ export async function renovarTokensDoInstagram(
     organization_id: string;
     meta_social_token_encrypted: string;
     meta_social_token_expires_at: string | null;
+    metadata: unknown;
   }[]) {
+    // O token da PÁGINA (gerado de um token de usuário de longa duração) não
+    // expira, e a página não tem `refresh_access_token`: só o Instagram renova.
+    if (redeDaSessao(linha.metadata) !== "instagram") continue;
     if (!precisaRenovar(linha.meta_social_token_expires_at, agora)) continue;
     const base = { organizationId: linha.organization_id, channelSessionId: linha.id };
 

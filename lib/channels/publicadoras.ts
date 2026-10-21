@@ -11,13 +11,17 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { nomeDoCanal } from "./estado";
 import { getAdapter } from "./index";
 import { channelBrand } from "./presentation";
-import type { ChannelProvider } from "./types";
+import type { ChannelProvider, FormatoDePublicacao } from "./types";
+
+const TODOS_OS_FORMATOS: readonly FormatoDePublicacao[] = ["imagem", "video", "carrossel", "reel", "story"];
 
 export interface ContaQuePublica {
   id: string;
   nome: string;
   /** A rede como o usuário a reconhece (`instagram`, `messenger`…). */
   rede: string;
+  /** O que esta conta publica — a tela só oferece estes, e a rota recusa o resto. */
+  formatos: FormatoDePublicacao[];
 }
 
 function publica(provider: string): boolean {
@@ -49,10 +53,12 @@ export async function contasQuePublicam(
     .filter((s) => publica(s.provider))
     .map((s) => {
       const plataforma = typeof s.metadata?.social_platform === "string" ? s.metadata.social_platform : null;
+      const adapter = getAdapter(s.provider as ChannelProvider);
       return {
         id: s.id,
         nome: nomeDoCanal(s),
         rede: channelBrand({ provider: s.provider, social_platform: plataforma }),
+        formatos: [...(adapter.formatosQuePublica?.(s.metadata) ?? TODOS_OS_FORMATOS)],
       };
     });
 }

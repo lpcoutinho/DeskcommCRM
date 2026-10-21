@@ -26,18 +26,26 @@
  * automação acabou de dar, que volta por aqui) não entra: regra que responde
  * comentário dispararia sobre a própria resposta. Outras mudanças (`mentions`,
  * `live_comments`…) são contadas e não gravadas.
+ *
+ * `object: "page"` é a página do Facebook (Messenger): `messaging[]` tem a MESMA
+ * forma (eco com `is_echo`, `mid`, anexos com `payload.url`), e o comentário
+ * chega em `changes[field=feed]`. A leitura do Messenger vem por marca d'água
+ * (`read.watermark`, sem `mid`) e é contada, não aplicada.
  */
 import { createHmac } from "node:crypto";
 
 import { verifyMetaSignature } from "../meta/webhook";
 import { socialMessageId } from "../social/catalog";
 import type { SocialMessage } from "../social/parser";
+import type { RedeSocial } from "./graph";
 
 /** O header em que a Meta manda a assinatura do corpo. */
 export const HEADER_ASSINATURA_META = "x-hub-signature-256";
 
 /** A rede desta conexão, gravada em `metadata.social_platform`. */
 export const REDE_INSTAGRAM = "instagram" as const;
+/** A página do Facebook (Messenger): o webhook chega como `object: "page"`. */
+export const REDE_FACEBOOK = "facebook" as const;
 
 /** A assinatura confere com o segredo do app? */
 export function verificarAssinaturaInstagram(
@@ -80,8 +88,10 @@ const id = (v: unknown): string | null =>
 
 /** A leitura de um entregável do webhook: o que gravar, e o que só contar. */
 export interface LeituraDoWebhookInstagram {
-  /** O corpo é de outro objeto (`page`, `whatsapp_business_account`…). */
+  /** O corpo é de outro objeto (`whatsapp_business_account`…). */
   objetoEstranho: boolean;
+  /** `instagram` (object `instagram`) ou `facebook` (object `page`). */
+  rede: RedeSocial;
   /** Contas (`entry.id`) que aparecem no corpo — a guarda confere com a sessão. */
   contas: string[];
   /** Mensagens e ecos desta conta, já no formato da ingestão social. */
@@ -137,6 +147,7 @@ function tipoDoAnexo(tipo: string | null): string {
 function lerMensagem(
   conta: string,
   item: Bruto,
+  rede: RedeSocial,
 ): { tipo: "mensagem"; msg: SocialMessage } | { tipo: "leitura"; mid: string; em: string | null } | null {
   const remetente = id(obj(item.sender)?.id);
   const destinatario = id(obj(item.recipient)?.id);
@@ -173,7 +184,7 @@ function lerMensagem(
   return {
     tipo: "mensagem",
     msg: {
-      platform: REDE_INSTAGRAM,
+      platform: rede,
       participantId: participante,
       accountId: conta,
       // A "thread" do Instagram É o participante: o envio endereça por
@@ -191,6 +202,40 @@ function lerMensagem(
       referral: obj(item.referral) ?? obj(m.referral) ?? null,
       identity: { phone: null, bsuid: null, anchor: null, username: null, displayName: null },
     },
+  };
+}
+
+/**
+ * Comentário na página do Facebook: chega dentro de `feed`, junto com curtida,
+ * publicação nova e edição. Só `item: "comment"` com `verb: "add"` é comentário
+ * novo; edição e remoção não disparam regra (a resposta já saiu, ou não há a
+ * quem responder).
+ */
+function lerComentarioDaPagina(conta: string, mudanca: Bruto, quando: string | null): ComentarioRecebido | null {
+  if (mudanca.field !== "feed") return null;
+  const v = obj(mudanca.value);
+  if (!v || v.item !== "comment" || v.verb !== "add") return null;
+  const externalId = id(v.comment_id);
+  if (!externalId) return null;
+  const autor = obj(v.from);
+  const autorId = id(autor?.id);
+  // A página comentando (a resposta pública da automação volta por aqui).
+  if (autorId === conta) return null;
+  const post = id(v.post_id);
+  const pai = id(v.parent_id);
+  const criado = typeof v.created_time === "number" ? instante(v.created_time * 1000) : null;
+  return {
+    accountId: conta,
+    externalId,
+    mediaExternalId: post,
+    mediaProductType: "PAGE_POST",
+    // Comentário de primeiro nível traz o próprio post como pai.
+    parentExternalId: pai && pai !== post ? pai : null,
+    authorExternalId: autorId,
+    // A página não manda @: o nome de quem comentou é o que identifica.
+    authorUsername: str(autor?.name),
+    texto: str(v.message),
+    comentadoEm: criado ?? quando,
   };
 }
 
@@ -231,7 +276,8 @@ export function lerWebhookInstagram(rawBody: string): LeituraDoWebhookInstagram 
   if (!corpo) return null;
 
   const leitura: LeituraDoWebhookInstagram = {
-    objetoEstranho: corpo.object !== "instagram",
+    objetoEstranho: corpo.object !== "instagram" && corpo.object !== "page",
+    rede: corpo.object === "page" ? REDE_FACEBOOK : REDE_INSTAGRAM,
     contas: [],
     mensagens: [],
     leituras: [],
@@ -255,14 +301,18 @@ export function lerWebhookInstagram(rawBody: string): LeituraDoWebhookInstagram 
         : null;
     for (const m of Array.isArray(entrada.changes) ? entrada.changes : []) {
       const mudanca = obj(m);
-      const comentario = mudanca ? lerComentario(conta, mudanca, quando) : null;
+      const comentario = !mudanca
+        ? null
+        : leitura.rede === REDE_FACEBOOK
+          ? lerComentarioDaPagina(conta, mudanca, quando)
+          : lerComentario(conta, mudanca, quando);
       if (comentario) leitura.comentarios.push(comentario);
       else leitura.mudancasIgnoradas += 1;
     }
 
     for (const i of Array.isArray(entrada.messaging) ? entrada.messaging : []) {
       const item = obj(i);
-      const lido = item ? lerMensagem(conta, item) : null;
+      const lido = item ? lerMensagem(conta, item, leitura.rede) : null;
       if (!lido) {
         leitura.eventosIgnorados += 1;
         continue;

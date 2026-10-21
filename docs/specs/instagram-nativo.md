@@ -17,8 +17,8 @@ Entra nesta entrega:
 - renovação diária do token (60 dias) e saúde da conexão no vigia existente.
 
 Entregas seguintes: publicação e agendamento de posts (módulo opcional,
-`docs/specs/publicacoes-nas-redes.md`) e comentários (abaixo). Fica para depois:
-Messenger.
+`docs/specs/publicacoes-nas-redes.md`), comentários e o Facebook (Messenger) —
+as duas abaixo.
 
 ## Modelo
 
@@ -126,6 +126,36 @@ mandar mensagem.
 
 Conexão feita antes desta versão não assina `comments`: conecte de novo (ou use
 o botão de configurar o webhook do app) para os comentários começarem a chegar.
+
+## Facebook (Messenger) — o mesmo canal
+
+A página do Facebook entra pelo MESMO provider `meta_social`, com
+`metadata.social_platform = "facebook"`. Sem migration e sem tocar em feature:
+o que muda mora em `lib/channels/meta-social/`, decidido pela rede da conexão.
+
+| | Instagram | Página do Facebook |
+|---|---|---|
+| Host da Graph | `graph.instagram.com` | `graph.facebook.com` (`graph-base.ts`) |
+| Token | da conta (60 dias, renovado todo dia) | da PÁGINA (não expira; sem renovação) |
+| Validação | `me?fields=user_id,username,…` | `me?fields=id,name,category` — `category` só existe em página, então o token de USUÁRIO é recusado com a frase certa |
+| Webhook (`object`) | `instagram` | `page` |
+| Campos assinados | messages, messaging_seen, messaging_referral, comments | messages, message_echoes, message_reads, messaging_referrals, feed |
+| Envio | `me/messages` | `me/messages` + `messaging_type: RESPONSE` |
+| Comentário | `changes[field=comments]`; resposta em `/<id>/replies` | `changes[field=feed]` com `item=comment, verb=add`; resposta em `/<id>/comments` |
+| Leitura | `read.mid` aplicada | `read.watermark` contada, não aplicada |
+| Publicação | container → `media_publish` (todos os formatos) | `/photos`, `/videos`, `/feed` com fotos anexadas — sem reels nem story |
+
+Uma conexão por rede: `buscarSessaoInstagram(org, rede)`. A rota é a mesma nas
+duas (`app/api/v1/channels/_conexao-social.ts`), atrás de `channels/instagram` e
+`channels/facebook`; a tela é `CanalInstagramClient` com `rede`.
+
+**Publicar na página não tem container**: a chamada que sobe a foto/vídeo
+PUBLICA. Por isso, depois dela, falha sem resposta clara (rede, prazo, 5xx) é
+DEFINITIVA ("confira na página") — só limite de chamadas volta para a fila.
+
+Os formatos de cada conexão vêm do adapter (`formatosQuePublica`), não da tela:
+o seletor de publicações só oferece o que a conta publica, e a rota recusa o
+resto.
 
 ## Fontes verificadas (documentação da Meta, via Meta MCP)
 

@@ -64,4 +64,15 @@ describe("responder comentário pela Graph do Instagram", () => {
     await expect(responderComentarioNoInstagram({ ...entrada, texto: "   " })).rejects.toThrow(/vazia/);
     expect(chamadas).toHaveLength(0);
   });
+
+  it("na página do Facebook a resposta pública é /<comentário>/comments, em graph.facebook.com", async () => {
+    credencial.mockResolvedValue({ channelSessionId: "s2", accountId: "101", token: "EAAp", tokenExpiresAt: null, rede: "facebook" });
+    const chamadas = meta({ id: "resp-fb" });
+    expect(await responderComentarioNoInstagram({ ...entrada, sessionRef: "101", commentExternalId: "101_9_1" })).toEqual({
+      externalId: "resp-fb",
+    });
+    const u = new URL(chamadas[0]!.url);
+    expect(u.hostname).toBe("graph.facebook.com");
+    expect(u.pathname).toMatch(/\/101_9_1\/comments$/);
+  });
 });

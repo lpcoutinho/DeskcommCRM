@@ -71,8 +71,12 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
       return fail("validation_error", t("Uma das mídias não pertence a esta empresa."), 422, { requestId });
     }
     const contas = await contasQuePublicam(createAdminClient(), orgId);
-    if (!contas.some((c) => c.id === corpo.channel_session_id)) {
+      const daConta = contas.find((c) => c.id === corpo.channel_session_id);
+    if (!daConta) {
       return fail("validation_error", t("Escolha uma conta conectada que publique conteúdo."), 422, { requestId });
+    }
+    if (!daConta.formatos.includes(corpo.formato)) {
+      return fail("validation_error", t("Esta conta não publica neste formato."), 422, { requestId });
     }
     campos = {
       channel_session_id: corpo.channel_session_id,

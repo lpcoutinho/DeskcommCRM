@@ -3174,6 +3174,15 @@ de contrato; pareamento real por código ainda requer confirmação no celular.
 - Evidência automatizada: `lib/publicacoes/{esquema,fila}.test.ts`, `lib/channels/meta-social/publicacao.test.ts`, invariantes `publicacoes-modulo.test.ts` e `publicacoes-provisionadora.test.ts`.
 - Pendente: prova pela tela num ambiente fresco com o módulo instalado, e publicação real numa conta de teste.
 
+## Facebook (Messenger) pela API da Meta — 2026-10-21
+
+- [P0] Conexões → Facebook: passo a passo da página; token de USUÁRIO recusado com "Use o token da PÁGINA"; Instagram e página conectados ao mesmo tempo, cada um na sua aba.
+- [P0] Mensagem no Messenger entra na caixa de entrada com o nome da pessoa; resposta da equipe sai pela página.
+- [P1] Comentário na página aparece em Comentários e dispara a regra de comentário; a resposta pública da própria página não volta como comentário novo.
+- [P1] Publicações: com a página escolhida, o formato oferece só imagem, vídeo e carrossel; a rota recusa story e reels.
+- Evidência automatizada: `lib/channels/meta-social/{webhook,adapter,conta,comentarios,publicacao}.test.ts`.
+- Pendente: prova pela tela num ambiente fresco, e mensagem, comentário e post reais numa página de teste.
+
 ## Comentários do Instagram — 2026-10-21
 
 - [P0] Comentário de outra pessoa numa publicação aparece em Atendimento › Comentários; comentário da própria conta não aparece.

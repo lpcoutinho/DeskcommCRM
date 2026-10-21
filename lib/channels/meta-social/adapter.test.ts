@@ -56,6 +56,26 @@ describe("metaSocialAdapter.send", () => {
     });
   });
 
+  it("página do Facebook: o MESMO envio, em graph.facebook.com, com o tipo de envio que o Messenger exige", async () => {
+    credencial.mockResolvedValue({
+      channelSessionId: "s2",
+      accountId: "101000000000001",
+      token: "EAApagina",
+      tokenExpiresAt: null,
+      rede: "facebook",
+    });
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({ message_id: "m.9" }), { status: 200 }));
+    const r = await metaSocialAdapter.send(envelope({ sessionRef: "101000000000001" }));
+    expect(r.externalId).toBe("social:101000000000001:m.9");
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(String(url)).toMatch(/^https:\/\/graph\.facebook\.com\/v\d+\.\d+\/me\/messages$/);
+    expect(JSON.parse(String((init as RequestInit).body))).toEqual({
+      recipient: { id: "9876543210123456" },
+      message: { text: "olá!" },
+      messaging_type: "RESPONSE",
+    });
+  });
+
   it("documento vai como anexo do tipo file", async () => {
     fetchMock.mockResolvedValue(new Response(JSON.stringify({ message_id: "mid-2" }), { status: 200 }));
     await metaSocialAdapter.send(

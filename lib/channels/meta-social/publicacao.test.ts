@@ -157,3 +157,67 @@ describe("publicarNoInstagram", () => {
     expect(morto.message).toMatch(/reconecte/);
   });
 });
+
+describe("publicar na página do Facebook", () => {
+  const PAGINA = "101000000000001";
+  beforeEach(() =>
+    credencial.mockResolvedValue({ channelSessionId: "s2", accountId: PAGINA, token: "EAAp", tokenExpiresAt: null, rede: "facebook" }),
+  );
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    credencial.mockReset();
+  });
+  const naPagina = (extra: Partial<PublicacaoInput> = {}) => entrada({ sessionRef: PAGINA, ...extra });
+
+  it("imagem: UMA chamada que publica (/photos), sem container, e o link do post", async () => {
+    const chamadas = meta({
+      [`POST ${PAGINA}/photos`]: () => json({ id: "foto1", post_id: `${PAGINA}_900` }),
+      [`GET ${PAGINA}_900`]: () => json({ permalink_url: `https://www.facebook.com/${PAGINA}/posts/900` }),
+    });
+    expect(await publicarNoInstagram(naPagina(), semEspera)).toEqual({
+      estado: "publicado",
+      idExterno: `${PAGINA}_900`,
+      link: `https://www.facebook.com/${PAGINA}/posts/900`,
+    });
+    expect(chamadas[0]!.corpo).toEqual({ url: entrada().midias[0]!.url, caption: "Promoção" });
+  });
+
+  it("carrossel: as fotos sobem sem publicar e o post é um só, com elas anexadas", async () => {
+    let n = 0;
+    const chamadas = meta({
+      [`POST ${PAGINA}/photos`]: () => json({ id: `f${++n}` }),
+      [`POST ${PAGINA}/feed`]: () => json({ id: `${PAGINA}_901` }),
+      [`GET ${PAGINA}_901`]: () => json({}),
+    });
+    const r = await publicarNoInstagram(
+      naPagina({ formato: "carrossel", midias: [{ url: "https://x/1.jpg", tipo: "imagem" }, { url: "https://x/2.jpg", tipo: "imagem" }] }),
+      semEspera,
+    );
+    expect(r).toMatchObject({ estado: "publicado", idExterno: `${PAGINA}_901` });
+    expect(chamadas.filter((c) => c.caminho === `${PAGINA}/photos`).map((c) => c.corpo?.published)).toEqual([false, false]);
+    expect(chamadas.find((c) => c.caminho === `${PAGINA}/feed`)?.corpo).toEqual({
+      message: "Promoção",
+      attached_media: [{ media_fbid: "f1" }, { media_fbid: "f2" }],
+    });
+  });
+
+  it("⭐ falha sem resposta clara DEPOIS da chamada que publica é DEFINITIVA (pode ter saído)", async () => {
+    meta({ [`POST ${PAGINA}/videos`]: () => json({ error: { code: 2, message: "temporário" } }, 503) });
+    const e = await publicarNoInstagram(naPagina({ formato: "video", midias: [{ url: "https://x/v.mp4", tipo: "video" }] }), semEspera).catch(
+      (x) => x,
+    );
+    expect(e).toBeInstanceOf(ErroDePublicacao);
+    expect(e.definitivo).toBe(true);
+    expect(e.message).toMatch(/confira na página/);
+  });
+
+  it("limite de chamadas é passageiro (nada saiu); story e reel são recusados antes da rede", async () => {
+    meta({ [`POST ${PAGINA}/photos`]: () => json({ error: { code: 32, message: "limite" } }, 400) });
+    expect((await publicarNoInstagram(naPagina(), semEspera).catch((x) => x)).definitivo).toBe(false);
+
+    const chamadas = meta({});
+    const story = await publicarNoInstagram(naPagina({ formato: "story" }), semEspera).catch((x) => x);
+    expect(story.definitivo).toBe(true);
+    expect(chamadas).toHaveLength(0);
+  });
+});

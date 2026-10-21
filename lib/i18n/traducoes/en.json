@@ -9415,5 +9415,22 @@
   "O evento não trouxe um comentário para responder.": "The event did not bring a comment to reply to.",
   "O comentário não existe mais nesta empresa.": "The comment no longer exists in this company.",
   "Este comentário já tinha uma resposta pública — cada um recebe uma só.": "This comment already had a public reply — each gets only one.",
-  "Este comentário já tinha recebido uma mensagem privada — a rede aceita só uma.": "This comment had already received a private message — the network accepts only one."
+  "Este comentário já tinha recebido uma mensagem privada — a rede aceita só uma.": "This comment had already received a private message — the network accepts only one.",
+  "A Meta precisa saber para onde entregar as mensagens da página. Sem isto o CRM envia, mas a mensagem do cliente não chega.": "Meta needs to know where to deliver the page's messages. Without this the CRM sends, but the customer's message does not arrive.",
+  "As mensagens da sua página entram na caixa de entrada, com a IA e a equipe respondendo como no WhatsApp. Os comentários das publicações aparecem em Comentários.": "Your page's messages land in the inbox, with the AI and the team replying like on WhatsApp. Comments on posts show up in Comments.",
+  "Atenção: um app tem um endereço só para as páginas. Se outra automação já recebe por este app, ela deixa de receber.": "Heads up: an app has a single address for pages. If another automation already receives through this app, it stops receiving.",
+  "Depois de conectar, configure o webhook com o botão desta tela (ou à mão no painel) e deixe o app no modo Ativo: a Meta só entrega mensagens de app publicado. Para atender quem não tem papel no app, a Meta exige a análise das permissões de mensagens e de comentários da página.": "After connecting, set up the webhook with this screen's button (or by hand in the dashboard) and leave the app in Live mode: Meta only delivers messages to published apps. To serve people without a role in the app, Meta requires review of the page's messaging and comment permissions.",
+  "Em developers.facebook.com, clique em Criar app e escolha o caso de uso de mensagens do Messenger. O app é da sua empresa: nenhum dado passa por terceiros.": "At developers.facebook.com, click Create app and pick the Messenger messaging use case. The app belongs to your company: no data goes through third parties.",
+  "Esta página do Facebook já está conectada em outro lugar.": "This Facebook page is already connected somewhere else.",
+  "Facebook (Messenger) pela API da Meta": "Facebook (Messenger) via the Meta API",
+  "Ligue a sua página do Facebook ao app": "Link your Facebook page to the app",
+  "No app, abra a configuração da API do Messenger, conecte a página e gere o token de acesso DA PÁGINA — não o de usuário. Gerado a partir de um token de usuário de longa duração, ele não expira.": "In the app, open the Messenger API settings, connect the page and generate the PAGE access token — not the user one. Generated from a long-lived user token, it does not expire.",
+  "Prefere fazer à mão? No painel do app, em Webhooks da página, cole os dois valores abaixo e assine os campos messages, message_echoes, message_reads, messaging_referrals e feed.": "Prefer to do it by hand? In the app dashboard, under Page Webhooks, paste the two values below and subscribe to the messages, message_echoes, message_reads, messaging_referrals and feed fields.",
+  "Página do Facebook conectada.": "Facebook page connected.",
+  "Token de acesso da página": "Page access token",
+  "O que comentam nas publicações do Instagram e da página do Facebook conectados. Responda em público ou chame no privado.": "What people comment on the connected Instagram and Facebook page posts. Reply publicly or message privately.",
+  "O que comentam nas publicações do Instagram e do Facebook, e a resposta em público ou no privado.": "What people comment on Instagram and Facebook posts, and the reply publicly or privately.",
+  "Os comentários chegam pela conexão do Instagram ou da página do Facebook. Se a conta já está conectada e nada aparece, confira se o webhook assina o campo de comentários (comments no Instagram, feed na página).": "Comments arrive through the Instagram or Facebook page connection. If the account is already connected and nothing shows up, check that the webhook subscribes to the comments field (comments on Instagram, feed on the page).",
+  "Conecte a conta profissional do Instagram ou a página do Facebook em Conexões para agendar posts.": "Connect the Instagram professional account or the Facebook page in Connections to schedule posts.",
+  "Esta conta não publica neste formato.": "This account does not publish in this format."
 }

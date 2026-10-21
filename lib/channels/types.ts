@@ -517,6 +517,13 @@ export interface ChannelAdapter {
   publicarConteudo?(input: PublicacaoInput): Promise<PublicacaoResultado>;
 
   /**
+   * Os formatos que ESTA conexão publica. A mesma família de canal pode ter
+   * redes que publicam coisas diferentes (a página do Facebook não tem story),
+   * e quem decide é o metadata da conexão, não a tela. Ausente = todos.
+   */
+  formatosQuePublica?(metadata: Record<string, unknown> | null): readonly FormatoDePublicacao[];
+
+  /**
    * Responde um comentário EM PÚBLICO, na própria publicação. OPCIONAL: só
    * rede social tem comentário, e a feature pergunta pela presença do método.
    * Devolve o id do comentário-resposta; lança quando a rede recusa.

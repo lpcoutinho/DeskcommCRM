@@ -22,7 +22,26 @@
 import { graphVersion } from "@/lib/graph-version";
 import { logger } from "@/lib/logger";
 
-import { hostAceito } from "../meta/graph-base";
+import { graphBaseUrl, hostAceito } from "../meta/graph-base";
+
+/**
+ * As duas redes deste canal. O CONTRATO é o mesmo (Graph, mensagens com
+ * `recipient`/`message`, eco, comentários); muda o HOST e o token: o Instagram
+ * com login do Instagram fala com `graph.instagram.com`, a página do Facebook
+ * (Messenger) com `graph.facebook.com`, com o token DA PÁGINA.
+ */
+export type RedeSocial = "instagram" | "facebook";
+
+/** A rede gravada em `metadata.social_platform`; sessão antiga (sem a chave) é Instagram. */
+export function redeDaSessao(metadata: unknown): RedeSocial {
+  const m = metadata && typeof metadata === "object" ? (metadata as Record<string, unknown>) : {};
+  return m.social_platform === "facebook" ? "facebook" : "instagram";
+}
+
+/** O nome que a pessoa reconhece, para as mensagens de erro. */
+export function nomeDaRede(rede: RedeSocial): string {
+  return rede === "facebook" ? "Facebook" : "Instagram";
+}
 
 /** O host real. A instalação que não aponta a variável fala com a Meta. */
 export const HOST_PADRAO_DO_INSTAGRAM = "https://graph.instagram.com";
@@ -82,18 +101,35 @@ function objeto(v: unknown): Record<string, unknown> | null {
  * (`me`, `me/messages`, `<id>/replies`). Devolve o corpo JSON ou LANÇA
  * `ErroDaGraphInstagram` — inclusive no `error` com HTTP 200.
  */
+export interface OpcoesDaChamada {
+  metodo?: "GET" | "POST";
+  corpo?: unknown;
+  consulta?: Record<string, string>;
+  /** A renovação de token do Instagram mora fora da base versionada (`/refresh_access_token`). */
+  semVersao?: boolean;
+}
+
 export async function chamarGraphInstagram(
   token: string,
   caminho: string,
-  opcoes: {
-    metodo?: "GET" | "POST";
-    corpo?: unknown;
-    consulta?: Record<string, string>;
-    /** A renovação de token mora fora da base versionada (`/refresh_access_token`). */
-    semVersao?: boolean;
-  } = {},
+  opcoes: OpcoesDaChamada = {},
 ): Promise<Record<string, unknown>> {
-  const base = opcoes.semVersao ? instagramHost() : instagramBaseUrl();
+  return chamarGraph("instagram", token, caminho, opcoes);
+}
+
+/**
+ * Uma chamada à Graph da REDE desta conexão. Mesmo contrato de
+ * `chamarGraphInstagram`; a página do Facebook usa a base do canal oficial
+ * (`graph.facebook.com`, a mesma versão e a mesma variável de prova local).
+ */
+export async function chamarGraph(
+  rede: RedeSocial,
+  token: string,
+  caminho: string,
+  opcoes: OpcoesDaChamada = {},
+): Promise<Record<string, unknown>> {
+  const base =
+    rede === "facebook" ? graphBaseUrl() : opcoes.semVersao ? instagramHost() : instagramBaseUrl();
   const url = new URL(`${base}/${caminho.replace(/^\/+/, "")}`);
   for (const [chave, valor] of Object.entries(opcoes.consulta ?? {})) {
     url.searchParams.set(chave, valor);
@@ -113,7 +149,7 @@ export async function chamarGraphInstagram(
       signal: AbortSignal.timeout(PRAZO_MS),
     });
   } catch {
-    throw new ErroDaGraphInstagram("Não foi possível falar com o Instagram.", null, null);
+    throw new ErroDaGraphInstagram(`Não foi possível falar com o ${nomeDaRede(rede)}.`, null, null);
   }
 
   const corpo = objeto(await resposta.json().catch(() => null));
@@ -123,7 +159,7 @@ export async function chamarGraphInstagram(
     const mensagem =
       typeof erro?.message === "string" && erro.message.trim()
         ? erro.message.trim()
-        : `O Instagram respondeu ${resposta.status}.`;
+        : `O ${nomeDaRede(rede)} respondeu ${resposta.status}.`;
     throw new ErroDaGraphInstagram(mensagem, resposta.status, codigo);
   }
   return corpo ?? {};
