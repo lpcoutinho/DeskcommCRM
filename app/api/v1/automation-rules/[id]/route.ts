@@ -15,7 +15,12 @@ import {
 } from "@/lib/automation/campo-do-gatilho-de-data";
 import { autoriaDaMudanca } from "@/lib/operacao/autoria";
 import { updateAutomationRuleSchema } from "@/lib/schemas";
-import { acoesQueFechamLaco, MENSAGEM_DO_LACO_DE_LEAD } from "@/lib/schemas/webhooks";
+import {
+  acoesDeComentarioForaDoGatilho,
+  acoesQueFechamLaco,
+  MENSAGEM_DA_ACAO_DE_COMENTARIO,
+  MENSAGEM_DO_LACO_DE_LEAD,
+} from "@/lib/schemas/webhooks";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { encryptRuleActionSecrets } from "@/lib/webhooks/secrets";
@@ -74,6 +79,17 @@ export async function PATCH(req: NextRequest, ctx: RouteCtx): Promise<Response> 
     ).length
   ) {
     return fail("invalid_request", t(MENSAGEM_DO_LACO_DE_LEAD), 400, { requestId });
+  }
+  // Mesma porta do lado para a ação de comentário: trocar SÓ o gatilho de uma
+  // regra que responde comentário deixaria a ação sem comentário para responder.
+  if (
+    (parsed.data.trigger_event !== undefined || parsed.data.actions !== undefined) &&
+    acoesDeComentarioForaDoGatilho(
+      parsed.data.trigger_event ?? gravada.trigger_event,
+      parsed.data.actions ?? gravada.actions ?? [],
+    ).length
+  ) {
+    return fail("invalid_request", t(MENSAGEM_DA_ACAO_DE_COMENTARIO), 400, { requestId });
   }
 
   const webhookSourceId = parsed.data.trigger_config?.webhook_source_id;

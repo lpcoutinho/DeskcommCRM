@@ -130,6 +130,31 @@ export async function buildContext(admin: SupabaseClient, row: EventRow): Promis
         if (contact) context.contact = contact;
       }
     }
+  } else if (row.entity_kind === "social_comment" && row.entity_id) {
+    // O comentário é a linha de AGORA (a resposta privada pode já ter saído por
+    // outra regra). O contato só existe quando a pessoa já conversou com a
+    // conta: a ligação é a identidade social, sem FK — quem comenta pode nunca
+    // ter mandado DM.
+    const { data: comment } = await admin
+      .from("social_comments")
+      .select("*")
+      .eq("id", row.entity_id)
+      .eq("organization_id", org)
+      .maybeSingle();
+    if (comment) {
+      context.comment = comment;
+      const identidade = (comment as { author_identity?: string | null }).author_identity;
+      if (identidade) {
+        const { data: contact } = await admin
+          .from("contacts")
+          .select("*")
+          .eq("organization_id", org)
+          .eq("social_identity", identidade)
+          .is("is_merged_into", null)
+          .maybeSingle();
+        if (contact) context.contact = contact;
+      }
+    }
   } else if (row.entity_kind === "message" && row.entity_id) {
     const contactId = row.payload.contact_id as string | undefined;
     if (contactId) {

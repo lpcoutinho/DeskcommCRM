@@ -24,6 +24,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { CHANNEL_PROVIDER_META_SOCIAL } from "../capabilities";
 import { socialMessageId } from "../social/catalog";
 import type { ChannelAdapter, ChannelHealth, OutboundEnvelope } from "../types";
+import { responderComentarioNoInstagram, responderComentarioNoPrivadoDoInstagram } from "./comentarios";
 import { chamarGraphInstagram, ErroDaGraphInstagram } from "./graph";
 import { publicarNoInstagram } from "./publicacao";
 import { credencialInstagram } from "./session";
@@ -97,6 +98,10 @@ export const metaSocialAdapter: ChannelAdapter = {
 
   // Publicar no perfil (feed, reels, stories) — ver `./publicacao.ts`.
   publicarConteudo: (input) => publicarNoInstagram(input),
+
+  // Responder comentário em público e no privado — ver `./comentarios.ts`.
+  responderComentario: (input) => responderComentarioNoInstagram(input),
+  responderComentarioNoPrivado: (input) => responderComentarioNoPrivadoDoInstagram(input),
 
   async checkHealth(input): Promise<ChannelHealth> {
     const cred = await credencialInstagram(createAdminClient(), {

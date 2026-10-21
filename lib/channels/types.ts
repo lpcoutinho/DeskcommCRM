@@ -515,6 +515,31 @@ export interface ChannelAdapter {
    * novo (`definitivo: false`) ou se a pessoa precisa mudar algo.
    */
   publicarConteudo?(input: PublicacaoInput): Promise<PublicacaoResultado>;
+
+  /**
+   * Responde um comentário EM PÚBLICO, na própria publicação. OPCIONAL: só
+   * rede social tem comentário, e a feature pergunta pela presença do método.
+   * Devolve o id do comentário-resposta; lança quando a rede recusa.
+   */
+  responderComentario?(input: RespostaDeComentarioInput): Promise<{ externalId: string }>;
+
+  /**
+   * Responde um comentário NO PRIVADO: a DM que nasce do comentário. A rede
+   * aceita UMA por comentário e só por alguns dias — quem garante a unicidade
+   * é a feature, antes de chamar (a rede recusaria a segunda, mas recusa não é
+   * guarda). Devolve o id da mensagem no formato do `external_id` de
+   * `messages`, para o eco que volta pelo webhook casar com ela.
+   */
+  responderComentarioNoPrivado?(
+    input: RespostaDeComentarioInput,
+  ): Promise<{ externalId: string; participantId: string | null }>;
+}
+
+export interface RespostaDeComentarioInput extends ChannelTenantScope {
+  sessionRef: string;
+  /** O id do comentário na rede (`social_comments.external_id`). */
+  commentExternalId: string;
+  texto: string;
 }
 
 export type FormatoDePublicacao = "imagem" | "video" | "carrossel" | "reel" | "story";

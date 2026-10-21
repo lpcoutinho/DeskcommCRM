@@ -10,6 +10,11 @@
  *
  * Só entra evento da conta DESTA sessão: a sessão veio do token do caminho, e o
  * corpo não escolhe onde gravar.
+ *
+ * Comentário vai para `social_comments` (dedupe por `external_id`); o INSERT
+ * emite `comment.received` pelo gatilho do banco, e é o motor de automação que
+ * responde. O eco da DM privada que uma regra mandou entra como mensagem da
+ * conversa, mas sem pausar a IA (`saidaDoProprioCrm`).
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -19,7 +24,7 @@ import type { SocialMessage } from "../social/parser";
 import { ingestZernioInbound } from "../zernio/ingest";
 import { chamarGraphInstagram } from "./graph";
 import { contaDaSessaoInstagram, credencialInstagram } from "./session";
-import { lerWebhookInstagram } from "./webhook";
+import { lerWebhookInstagram, REDE_INSTAGRAM, type ComentarioRecebido } from "./webhook";
 
 export type DesfechoDaEntradaInstagram =
   | { ok: true; body: Record<string, unknown> }
@@ -84,6 +89,71 @@ async function completarPerfil(
   }
 }
 
+/** `rede:conta:autor` — a mesma forma de `contacts.social_identity`. */
+export function identidadeDoAutor(c: Pick<ComentarioRecebido, "accountId" | "authorExternalId">): string | null {
+  return c.authorExternalId ? `${REDE_INSTAGRAM}:${c.accountId}:${c.authorExternalId}` : null;
+}
+
+async function gravarComentario(
+  admin: SupabaseClient,
+  input: { organizationId: string; channelSessionId: string },
+  c: ComentarioRecebido,
+): Promise<"comentario" | "comentario_repetido"> {
+  const { error } = await admin.from("social_comments").insert({
+    organization_id: input.organizationId,
+    channel_session_id: input.channelSessionId,
+    network: REDE_INSTAGRAM,
+    account_external_id: c.accountId,
+    external_id: c.externalId,
+    media_external_id: c.mediaExternalId,
+    media_product_type: c.mediaProductType,
+    parent_external_id: c.parentExternalId,
+    author_external_id: c.authorExternalId,
+    author_identity: identidadeDoAutor(c),
+    author_username: c.authorUsername,
+    body: c.texto,
+    ...(c.comentadoEm ? { commented_at: c.comentadoEm } : {}),
+  });
+  // Reentrega do webhook: o comentário já está gravado e o evento já saiu.
+  if (error?.code === "23505") return "comentario_repetido";
+  // Erro de verdade sobe: a entrada responde 5xx e a Meta reentrega.
+  if (error) throw new Error(`social_comment_insert_failed: ${error.message}`);
+  return "comentario";
+}
+
+/**
+ * O eco é da DM privada que uma regra mandou a partir de um comentário?
+ *
+ * Duas formas de reconhecer, porque o eco pode chegar ANTES da resposta da Meta
+ * ao nosso envio (aí o id ainda não foi gravado): pelo id da mensagem, ou pelo
+ * autor do comentário cuja resposta privada está saindo agora.
+ */
+async function ecoDaRespostaPrivada(
+  admin: SupabaseClient,
+  organizationId: string,
+  msg: SocialMessage,
+): Promise<{ autor: string | null } | null> {
+  const porId = await admin
+    .from("social_comments")
+    .select("author_username")
+    .eq("organization_id", organizationId)
+    .eq("private_reply_external_id", msg.externalId)
+    .limit(1)
+    .maybeSingle();
+  if (porId.data) return { autor: (porId.data as { author_username: string | null }).author_username };
+  const recente = new Date(Date.now() - 10 * 60_000).toISOString();
+  const saindo = await admin
+    .from("social_comments")
+    .select("author_username")
+    .eq("organization_id", organizationId)
+    .eq("author_identity", `${msg.platform}:${msg.accountId}:${msg.participantId}`)
+    .eq("private_reply_status", "sending")
+    .gte("private_replied_at", recente)
+    .limit(1)
+    .maybeSingle();
+  return saindo.data ? { autor: (saindo.data as { author_username: string | null }).author_username } : null;
+}
+
 export async function ingerirWebhookInstagram(
   admin: SupabaseClient,
   input: { organizationId: string; channelSessionId: string; rawBody: string },
@@ -108,14 +178,31 @@ export async function ingerirWebhookInstagram(
       desfechos.push("outra_conta");
       continue;
     }
-    const msg = await completarPerfil(admin, input.organizationId, bruta, token);
+    let msg = await completarPerfil(admin, input.organizationId, bruta, token);
+    const daAutomacao =
+      msg.direction === "outbound" ? await ecoDaRespostaPrivada(admin, input.organizationId, msg) : null;
+    if (daAutomacao?.autor) {
+      // A conversa nasce desta DM: o nome é o @ de quem comentou.
+      msg = { ...msg, identity: { ...msg.identity, username: daAutomacao.autor, displayName: daAutomacao.autor } };
+    }
     const r = await ingestZernioInbound(admin, {
       organizationId: input.organizationId,
       channelSessionId: input.channelSessionId,
       payload: null,
       socialMessage: msg,
+      saidaDoProprioCrm: daAutomacao !== null,
     });
-    desfechos.push(msg.direction === "outbound" ? `eco:${r.status}` : r.status);
+    desfechos.push(
+      msg.direction === "outbound" ? `${daAutomacao ? "eco_da_resposta_privada" : "eco"}:${r.status}` : r.status,
+    );
+  }
+
+  for (const comentario of leitura.comentarios) {
+    if (comentario.accountId !== conta) {
+      desfechos.push("outra_conta");
+      continue;
+    }
+    desfechos.push(await gravarComentario(admin, input, comentario));
   }
 
   // Leitura: o cliente VIU. Não rebaixa nada (é o último estado), e mensagem
@@ -135,10 +222,10 @@ export async function ingerirWebhookInstagram(
   return {
     ok: true,
     body: {
-      received: leitura.mensagens.length + leitura.leituras.length,
+      received: leitura.mensagens.length + leitura.leituras.length + leitura.comentarios.length,
       outcomes: desfechos,
-      // Comentários chegam pelo mesmo webhook e ficam para a entrega deles: a
-      // contagem aqui é o rastro de que chegaram (o corpo cru está no arquivo).
+      // Mudanças que não são comentário de terceiro (o da própria conta, menção):
+      // a contagem é o rastro de que chegaram (o corpo cru está no arquivo).
       ignored_changes: leitura.mudancasIgnoradas,
       ignored_events: leitura.eventosIgnorados,
       ...(desfechos.length === 0 ? { reason: "evento_sem_interesse" } : {}),

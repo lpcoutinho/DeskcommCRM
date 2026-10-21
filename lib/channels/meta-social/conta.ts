@@ -21,7 +21,7 @@ import { graphBaseUrl } from "../meta/graph-base";
 import { chamarGraphInstagram, ErroDaGraphInstagram } from "./graph";
 
 /** Os campos que este canal consome hoje. Assinar o que ninguém lê é ruído. */
-export const CAMPOS_DO_WEBHOOK = ["messages", "messaging_seen", "messaging_referral"] as const;
+export const CAMPOS_DO_WEBHOOK = ["messages", "messaging_seen", "messaging_referral", "comments"] as const;
 
 export type ValidacaoDaConta =
   | {

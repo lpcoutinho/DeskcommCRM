@@ -10,3 +10,4 @@ import "@/lib/automation/actions/send-email";
 import "@/lib/automation/actions/send-whatsapp";
 import "@/lib/automation/actions/start-message-flow";
 import "@/lib/automation/actions/send-ai-message";
+import "@/lib/automation/actions/responder-comentario";

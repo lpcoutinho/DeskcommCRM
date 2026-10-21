@@ -248,6 +248,9 @@ export const AUDIT_ACTIONS = [
   "publicacao.removida",
   "publicacao.publicada",
   "publicacao.falhou",
+  // Comentário respondido pela PESSOA na tela de Comentários (em público ou
+  // no privado). A resposta da regra fica no run da automação, como as demais.
+  "social_comment.replied",
   "prospecting.changed",
   // A ABORDAGEM que SAIU (PR #963). Distinta de `prospecting.changed`, que é
   // configuração: esta é a única linha do produto que fala primeiro com quem

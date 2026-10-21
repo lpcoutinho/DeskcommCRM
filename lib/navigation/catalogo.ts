@@ -185,6 +185,17 @@ export const NAV_CATALOG = [
     sidebar: true,
   },
   {
+    // Comentários das publicações das contas sociais conectadas (Instagram
+    // nativo). Atendimento, e não CRM: é a porta por onde a pessoa chega antes
+    // de mandar DM. Sem `sidebar`: só quem conecta rede social precisa dela no
+    // dia a dia, e a barra lateral é de todos.
+    href: "/app/comentarios",
+    label: "Comentários",
+    description: "O que comentam nas publicações do Instagram, e a resposta em público ou no privado.",
+    icon: "ChatCircle",
+    group: "atendimento",
+  },
+  {
     // Entra em "atendimento", e não em "organizacao", porque a Agenda é onde o
     // dia acontece e não onde ele se configura: quem atende abre isto de manhã
     // junto com o Inbox. Os TIPOS de agendamento — que são configuração de

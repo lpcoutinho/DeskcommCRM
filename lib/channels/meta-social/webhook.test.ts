@@ -117,12 +117,59 @@ describe("lerWebhookInstagram", () => {
     expect(l.eventosIgnorados).toBe(2);
   });
 
-  it("comentário (changes) é contado e não gravado nesta entrega", () => {
+  it("comentário de outra pessoa vira comentário recebido, com a publicação e o autor", () => {
+    // Forma do exemplo da documentação de webhooks de comentário do Instagram.
     const l = lerWebhookInstagram(
-      corpo([], { changes: [{ field: "comments", value: { id: "c1", text: "eu quero" } }] }),
+      JSON.stringify({
+        object: "instagram",
+        entry: [
+          {
+            id: CONTA,
+            time: 1761000000,
+            changes: [
+              {
+                field: "comments",
+                value: {
+                  from: { id: CLIENTE, username: "maria.silva" },
+                  media: { id: "17900000000000001", media_product_type: "FEED" },
+                  id: "17865799348089039",
+                  text: "eu quero!",
+                },
+              },
+            ],
+          },
+        ],
+      }),
     )!;
     expect(l.mensagens).toHaveLength(0);
-    expect(l.mudancasIgnoradas).toBe(1);
+    expect(l.mudancasIgnoradas).toBe(0);
+    expect(l.comentarios).toEqual([
+      {
+        accountId: CONTA,
+        externalId: "17865799348089039",
+        mediaExternalId: "17900000000000001",
+        mediaProductType: "FEED",
+        parentExternalId: null,
+        authorExternalId: CLIENTE,
+        authorUsername: "maria.silva",
+        texto: "eu quero!",
+        // `time` em segundos vira o instante certo, não o ano 57000.
+        comentadoEm: new Date(1761000000 * 1000).toISOString(),
+      },
+    ]);
+  });
+
+  it("⭐ o comentário da PRÓPRIA conta não entra (a resposta pública da regra volta por aqui)", () => {
+    const l = lerWebhookInstagram(
+      corpo([], {
+        changes: [
+          { field: "comments", value: { from: { id: CONTA, username: "loja" }, id: "c2", text: "Te chamei no direct!" } },
+          { field: "mentions", value: { media_id: "m1", comment_id: "c3" } },
+        ],
+      }),
+    )!;
+    expect(l.comentarios).toHaveLength(0);
+    expect(l.mudancasIgnoradas).toBe(2);
   });
 
   it("objeto de outra rede não é lido; JSON inválido devolve null", () => {

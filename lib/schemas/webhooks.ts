@@ -100,6 +100,11 @@ export const ENTIDADE_ESPERADA_POR_GATILHO = {
   // regras do mesmo gatilho com N diferentes disparariam juntas.
   "lead.silent_for": "crm_lead",
   "lead.stage_stale": "crm_lead",
+  // Comentário numa publicação de rede social conectada (Instagram nativo).
+  // Nasce do gatilho do banco no INSERT de `social_comments` (migration 0726),
+  // reservado ao servidor no `emit_event`; a entidade é o próprio comentário,
+  // que o `buildContext` hidrata como `comment`.
+  "comment.received": "social_comment",
 } as const;
 
 export type GatilhoDeAutomacao = keyof typeof ENTIDADE_ESPERADA_POR_GATILHO;
@@ -209,6 +214,39 @@ function recusarLacoDeLead(
 ): void {
   if (!acoesQueFechamLaco(regra.trigger_event, regra.actions).length) return;
   ctx.addIssue({ code: "custom", path: ["actions"], message: MENSAGEM_DO_LACO_DE_LEAD });
+}
+
+/** O gatilho de comentário — o único em que as ações de comentário fazem sentido. */
+export const GATILHO_DE_COMENTARIO = "comment.received" as const;
+
+/** As ações que respondem o comentário do evento: precisam de um comentário no contexto. */
+export const ACOES_DE_COMENTARIO = ["reply_comment", "private_reply_comment"] as const;
+
+/**
+ * O que a TELA oferece no gatilho de comentário: as respostas e o aviso a outro
+ * sistema. As demais ações pedem negócio ou telefone, que o comentário não tem
+ * (a API não recusa: a ação sem alvo termina `skipped` e diz o motivo).
+ */
+export const ACOES_NO_GATILHO_DE_COMENTARIO = [...ACOES_DE_COMENTARIO, "call_webhook"] as const;
+
+export const MENSAGEM_DA_ACAO_DE_COMENTARIO =
+  "Responder comentário só funciona no gatilho \"Quando alguém comentar numa publicação\".";
+
+/** As ações de comentário de uma regra cujo gatilho NÃO é comentário (vazio = regra coerente). */
+export function acoesDeComentarioForaDoGatilho(
+  triggerEvent: string | undefined,
+  actions: readonly { type: string; config?: Record<string, unknown> }[] | undefined,
+): string[] {
+  if (!triggerEvent || triggerEvent === GATILHO_DE_COMENTARIO) return [];
+  return tiposDeAcao(actions).filter((t) => (ACOES_DE_COMENTARIO as readonly string[]).includes(t));
+}
+
+function recusarAcaoDeComentarioForaDoGatilho(
+  regra: { trigger_event?: string; actions?: readonly { type: string; config?: Record<string, unknown> }[] },
+  ctx: z.RefinementCtx,
+): void {
+  if (!acoesDeComentarioForaDoGatilho(regra.trigger_event, regra.actions).length) return;
+  ctx.addIssue({ code: "custom", path: ["actions"], message: MENSAGEM_DA_ACAO_DE_COMENTARIO });
 }
 
 export const TRIGGER_EVENTS = Object.keys(ENTIDADE_ESPERADA_POR_GATILHO) as [
@@ -450,6 +488,20 @@ const acoesFixas = [
       plano_id: z.string().trim().min(1).max(64),
     }),
   }),
+  // Responder o comentário do evento, EM PÚBLICO, embaixo dele. O texto leva
+  // as variáveis do comentário (`{{comment.author_username}}`). Teto da Meta
+  // para comentário: 2.200 caracteres.
+  z.object({
+    type: z.literal("reply_comment"),
+    config: z.object({ template: z.string().min(1).max(2200) }),
+  }),
+  // A DM que nasce do comentário ("resposta privada"): UMA por comentário, até
+  // 7 dias depois dele — a ação garante as duas coisas antes de chamar a rede.
+  // A conversa aparece no Inbox, e se a pessoa responder o atendimento segue.
+  z.object({
+    type: z.literal("private_reply_comment"),
+    config: z.object({ template: z.string().min(1).max(1000) }),
+  }),
 ] as const;
 
 /**
@@ -566,7 +618,8 @@ export const createAutomationRuleSchema = z
   .superRefine(exigirConfigDoGatilhoDeData)
   .superRefine(exigirConfigDosGatilhosDeTempo)
   .superRefine(exigirIdDaFonteWebhook)
-  .superRefine(recusarLacoDeLead);
+  .superRefine(recusarLacoDeLead)
+  .superRefine(recusarAcaoDeComentarioForaDoGatilho);
 
 function exigirIdDaFonteWebhook(
   regra: { trigger_config?: Record<string, unknown> },
@@ -663,7 +716,8 @@ export const updateAutomationRuleSchema = z
   .superRefine(exigirIdDaFonteWebhook)
   // Só vê o laço quando o PATCH traz gatilho E ações; o PATCH parcial é
   // conferido contra a regra gravada na rota.
-  .superRefine(recusarLacoDeLead);
+  .superRefine(recusarLacoDeLead)
+  .superRefine(recusarAcaoDeComentarioForaDoGatilho);
 
 export type CreateWebhookSourceInput = z.infer<typeof createWebhookSourceSchema>;
 export type UpdateWebhookSourceInput = z.infer<typeof updateWebhookSourceSchema>;

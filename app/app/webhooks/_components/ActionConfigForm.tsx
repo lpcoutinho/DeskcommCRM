@@ -86,7 +86,10 @@ export type ActionItem =
   // #1752 — a SEQUÊNCIA: o plano mora em `organizations.settings.task_plans`,
   // e o editor só escolhe QUAL deles aplicar. `plano_id` é o id do JSON (não
   // uuid) — mesmos campos do schema da API e da ação `apply_task_plan`.
-  | { type: "apply_task_plan"; config: { plano_id: string } };
+  | { type: "apply_task_plan"; config: { plano_id: string } }
+  // Responder o comentário do evento — em público ou no privado (DM).
+  | { type: "reply_comment"; config: { template: string } }
+  | { type: "private_reply_comment"; config: { template: string } };
 
 export function defaultActionConfig(type: ActionItem["type"]): ActionItem {
   switch (type) {
@@ -121,6 +124,9 @@ export function defaultActionConfig(type: ActionItem["type"]): ActionItem {
       };
     case "apply_task_plan":
       return { type, config: { plano_id: "" } };
+    case "reply_comment":
+    case "private_reply_comment":
+      return { type, config: { template: "" } };
   }
 }
 
@@ -195,6 +201,55 @@ const TEMPLATE_VARS = [
   { token: "{{telefone}}", label: "Telefone" },
   { token: "{{lead.title}}", label: "Título do lead" },
 ];
+
+const VARIAVEIS_DO_COMENTARIO = [
+  { token: "{{comment.author_username}}", label: "@ de quem comentou" },
+  { token: "{{comment.body}}", label: "Texto do comentário" },
+];
+
+/**
+ * A resposta a um comentário: só o texto. A conta é a do comentário (quem
+ * responde é a conexão em que ele chegou), então não há número a escolher.
+ */
+function ResponderComentarioForm({
+  config,
+  onChange,
+  privado,
+}: FormProps<{ template: string }> & { privado: boolean }) {
+  const t = useT();
+  const textareaRef = React.useRef<HTMLTextAreaElement>(null);
+  const insertVar = (token: string) => {
+    const el = textareaRef.current;
+    const atual = config.template;
+    const inicio = el?.selectionStart ?? atual.length;
+    const fim = el?.selectionEnd ?? atual.length;
+    onChange({ template: atual.slice(0, inicio) + token + atual.slice(fim) });
+  };
+  return (
+    <div className="space-y-1">
+      <Label>{privado ? t("Mensagem privada") : t("Resposta pública")}</Label>
+      <div className="flex flex-wrap gap-1">
+        {VARIAVEIS_DO_COMENTARIO.map((v) => (
+          <Button key={v.token} type="button" variant="secondary" size="sm" onClick={() => insertVar(v.token)}>
+            {t(v.label)}
+          </Button>
+        ))}
+      </div>
+      <Textarea
+        ref={textareaRef}
+        rows={3}
+        value={config.template}
+        onChange={(e) => onChange({ template: e.target.value })}
+        placeholder={privado ? t("Oi! Aqui está o link que você pediu: …") : t("Te chamei no direct! 💬")}
+      />
+      <p className="text-xs text-muted-foreground">
+        {privado
+          ? t("A rede aceita uma mensagem privada por comentário, até 7 dias depois dele. A conversa aparece no Inbox, e se a pessoa responder o atendimento segue por lá.")
+          : t("A resposta aparece embaixo do comentário, assinada pela conta. Cada comentário recebe uma resposta automática só.")}
+      </p>
+    </div>
+  );
+}
 
 function SendWhatsappForm({
   config,
@@ -1141,6 +1196,15 @@ export function ActionConfigForm({
       return (
         <ApplyTaskPlanForm
           config={action.config}
+          onChange={(config) => onChange({ type: action.type, config })}
+        />
+      );
+    case "reply_comment":
+    case "private_reply_comment":
+      return (
+        <ResponderComentarioForm
+          config={action.config}
+          privado={action.type === "private_reply_comment"}
           onChange={(config) => onChange({ type: action.type, config })}
         />
       );

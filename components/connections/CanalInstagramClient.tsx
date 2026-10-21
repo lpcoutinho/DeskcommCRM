@@ -323,7 +323,7 @@ export function CanalInstagramClient() {
           <div className="flex flex-col gap-3 border-t border-border pt-3">
             <p className="text-xs text-muted-foreground">
               {t(
-                "Prefere fazer à mão? No painel do app, em Webhooks do Instagram, cole os dois valores abaixo e assine os campos messages, messaging_seen e messaging_referral.",
+                "Prefere fazer à mão? No painel do app, em Webhooks do Instagram, cole os dois valores abaixo e assine os campos messages, messaging_seen, messaging_referral e comments.",
               )}
             </p>
             <ParaColar rotulo={t("URL do webhook")} valor={estado.webhook_url} />

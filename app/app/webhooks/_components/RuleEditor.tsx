@@ -20,7 +20,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Plus, Trash, CaretUp, CaretDown } from "@/lib/ui/icons";
-import { acoesQueFechamLaco, createAutomationRuleSchema, TRIGGER_EVENTS } from "@/lib/schemas/webhooks";
+import {
+  ACOES_NO_GATILHO_DE_COMENTARIO,
+  acoesDeComentarioForaDoGatilho,
+  acoesQueFechamLaco,
+  createAutomationRuleSchema,
+  GATILHO_DE_COMENTARIO,
+  TRIGGER_EVENTS,
+} from "@/lib/schemas/webhooks";
 import {
   DIAS_MAX,
   DIAS_MIN,
@@ -179,6 +186,13 @@ export const CURATED_FIELDS: Record<TriggerEvent, CuratedField[]> = {
   // funil (via etapa/tags) e tags do contato.
   "lead.silent_for": LEAD_FIELDS,
   "lead.stage_stale": [...LEAD_FIELDS, STAGE_FIELD],
+  // O caso do n8n que motivou o gatilho: "comentou EU QUERO → DM com o link".
+  // O texto é o filtro principal; a publicação filtra a campanha de um post só.
+  "comment.received": [
+    { value: "comment.body", label: "Texto do comentário", op: "contains" },
+    { value: "comment.media_external_id", label: "Id da publicação", op: "eq" },
+    { value: "comment.author_username", label: "@ de quem comentou", op: "eq" },
+  ],
 };
 
 export const OP_LABELS: Record<Op, string> = { eq: "é", neq: "não é", contains: "contém" };
@@ -896,6 +910,13 @@ export function RuleEditor({ open, onOpenChange, rule }: Props) {
                     as ações que regravam o lead: fechariam laço (#1528). */}
                 {(Object.keys(ACTION_LABELS) as ActionType[])
                   .filter((actionType) => !acoesQueFechamLaco(triggerEvent, [{ type: actionType }]).length)
+                  // Responder comentário só no gatilho de comentário; e nele, só o
+                  // que não depende de negócio nem de telefone.
+                  .filter((actionType) =>
+                    triggerEvent === GATILHO_DE_COMENTARIO
+                      ? (ACOES_NO_GATILHO_DE_COMENTARIO as readonly string[]).includes(actionType)
+                      : !acoesDeComentarioForaDoGatilho(triggerEvent, [{ type: actionType }]).length,
+                  )
                   .map((actionType) => (
                     <SelectItem key={actionType} value={actionType}>
                       {t(ACTION_LABELS[actionType])}

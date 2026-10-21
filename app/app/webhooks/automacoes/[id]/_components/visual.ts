@@ -3,6 +3,7 @@ import type { ComponentType } from "react";
 import {
   Bell,
   Brain,
+  ChatCircle,
   EnvelopeSimple,
   FlowArrow,
   Funnel,
@@ -55,6 +56,8 @@ export const VISUAL_DA_ACAO: Record<ActionType, VisualDaCaixa> = {
   start_message_flow: { icon: FlowArrow, paleta: "Iniciar follow-up", ...SUCESSO },
   create_task: { icon: Bell, paleta: "Tarefa interna", ...AVISO },
   apply_task_plan: { icon: ListChecks, paleta: "Plano de tarefas", ...AVISO },
+  reply_comment: { icon: ChatCircle, paleta: "Responder em público", ...SUCESSO },
+  private_reply_comment: { icon: PaperPlaneTilt, paleta: "Responder no privado", ...SUCESSO },
 };
 
 /** A ordem da paleta: a mesma do seletor "Adicionar ação" do editor de hoje. */

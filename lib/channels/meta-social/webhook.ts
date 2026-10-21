@@ -20,10 +20,12 @@
  * ─── O que este canal lê ────────────────────────────────────────────────────
  *
  * `object: "instagram"`, `entry[].messaging[]`: mensagem do cliente, eco do que
- * a conta enviou (pelo CRM ou pelo app do Instagram) e leitura. Comentários
- * (`entry[].changes[]`) chegam pelo mesmo webhook e ficam para a entrega dos
- * comentários: hoje são contados e não gravados (o corpo cru fica no arquivo
- * do webhook).
+ * a conta enviou (pelo CRM ou pelo app do Instagram) e leitura.
+ * `entry[].changes[]` com `field: "comments"`: comentário numa publicação da
+ * conta. O que a PRÓPRIA conta comenta (inclusive a resposta pública que a
+ * automação acabou de dar, que volta por aqui) não entra: regra que responde
+ * comentário dispararia sobre a própria resposta. Outras mudanças (`mentions`,
+ * `live_comments`…) são contadas e não gravadas.
  */
 import { createHmac } from "node:crypto";
 
@@ -86,10 +88,28 @@ export interface LeituraDoWebhookInstagram {
   mensagens: SocialMessage[];
   /** Leituras: o cliente viu a mensagem com este `mid`. */
   leituras: { accountId: string; externalId: string; lidaEm: string | null }[];
-  /** Comentários e demais mudanças — fora do escopo desta entrega. */
+  /** Comentários de outras pessoas nas publicações da conta. */
+  comentarios: ComentarioRecebido[];
+  /** Mudanças que não são comentário de terceiro (comentário da conta, menção…). */
   mudancasIgnoradas: number;
   /** Itens de `messaging` que não são mensagem nem leitura (reação, postback…). */
   eventosIgnorados: number;
+}
+
+/** Um comentário recebido, no formato da gravação em `social_comments`. */
+export interface ComentarioRecebido {
+  accountId: string;
+  externalId: string;
+  mediaExternalId: string | null;
+  /** `FEED`, `REELS`, `AD`… — vocabulário aberto da Meta. */
+  mediaProductType: string | null;
+  /** Presente quando o comentário responde outro comentário. */
+  parentExternalId: string | null;
+  authorExternalId: string | null;
+  authorUsername: string | null;
+  texto: string | null;
+  /** O `entry.time` (segundos); a Meta não manda a hora do comentário em si. */
+  comentadoEm: string | null;
 }
 
 function instante(ms: unknown): string | null {
@@ -174,6 +194,29 @@ function lerMensagem(
   };
 }
 
+function lerComentario(conta: string, mudanca: Bruto, quando: string | null): ComentarioRecebido | null {
+  if (mudanca.field !== "comments") return null;
+  const v = obj(mudanca.value);
+  const externalId = id(v?.id);
+  if (!v || !externalId) return null;
+  const autor = obj(v.from);
+  const autorId = id(autor?.id);
+  // A conta comentando (a resposta pública da automação volta por aqui).
+  if (autorId === conta) return null;
+  const midia = obj(v.media);
+  return {
+    accountId: conta,
+    externalId,
+    mediaExternalId: id(midia?.id),
+    mediaProductType: str(midia?.media_product_type),
+    parentExternalId: id(v.parent_id),
+    authorExternalId: autorId,
+    authorUsername: str(autor?.username),
+    texto: str(v.text),
+    comentadoEm: quando,
+  };
+}
+
 /**
  * Lê o corpo de um entregável. Nunca lança: JSON inválido ou objeto estranho
  * voltam como leitura vazia, e quem decide o desfecho é a entrada.
@@ -192,6 +235,7 @@ export function lerWebhookInstagram(rawBody: string): LeituraDoWebhookInstagram 
     contas: [],
     mensagens: [],
     leituras: [],
+    comentarios: [],
     mudancasIgnoradas: 0,
     eventosIgnorados: 0,
   };
@@ -203,7 +247,18 @@ export function lerWebhookInstagram(rawBody: string): LeituraDoWebhookInstagram 
     if (!entrada || !conta) continue;
     if (!leitura.contas.includes(conta)) leitura.contas.push(conta);
 
-    if (Array.isArray(entrada.changes)) leitura.mudancasIgnoradas += entrada.changes.length;
+    // `entry.time` vem em SEGUNDOS no exemplo de comentário da Meta e em ms em
+    // entregas de mensagem; abaixo de 10^12 é segundo (10^12 ms é 2001).
+    const quando =
+      typeof entrada.time === "number"
+        ? instante(entrada.time < 1e12 ? entrada.time * 1000 : entrada.time)
+        : null;
+    for (const m of Array.isArray(entrada.changes) ? entrada.changes : []) {
+      const mudanca = obj(m);
+      const comentario = mudanca ? lerComentario(conta, mudanca, quando) : null;
+      if (comentario) leitura.comentarios.push(comentario);
+      else leitura.mudancasIgnoradas += 1;
+    }
 
     for (const i of Array.isArray(entrada.messaging) ? entrada.messaging : []) {
       const item = obj(i);

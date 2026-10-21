@@ -15,7 +15,9 @@ export type ActionType =
   | "call_webhook"
   | "start_message_flow"
   | "create_task"
-  | "apply_task_plan";
+  | "apply_task_plan"
+  | "reply_comment"
+  | "private_reply_comment";
 
 export const TRIGGER_LABELS: Record<TriggerEvent, string> = {
   "lead.created": "Quando entrar um contato novo (webhook)",
@@ -62,6 +64,10 @@ export const TRIGGER_LABELS: Record<TriggerEvent, string> = {
   // funil) ficam embaixo, na configuração da regra.
   "lead.silent_for": "Quando ficar N dias sem mensagem",
   "lead.stage_stale": "Quando um lead ficar N dias na mesma etapa",
+  // Comentário de outra pessoa numa publicação de conta social conectada. A
+  // frase diz o FATO que a pessoa vê no perfil, não a rede: a rede é de quem
+  // conectou, e a regra serve a qualquer conta que receba comentário.
+  "comment.received": "Quando alguém comentar numa publicação",
 };
 
 export const ACTION_LABELS: Record<ActionType, string> = {
@@ -80,4 +86,7 @@ export const ACTION_LABELS: Record<ActionType, string> = {
   // #1752 — a SEQUÊNCIA em vez do lembrete único: aplica um plano salvo em
   // Tarefas › Planos ao negócio, criando as N tarefas de uma vez e na ordem.
   apply_task_plan: "Aplicar um plano de tarefas ao negócio",
+  // As duas respostas a comentário: só aparecem no gatilho de comentário.
+  reply_comment: "Responder o comentário em público",
+  private_reply_comment: "Responder o comentário no privado (DM)",
 };

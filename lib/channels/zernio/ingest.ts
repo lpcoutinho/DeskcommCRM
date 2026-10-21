@@ -79,6 +79,13 @@ export async function ingestZernioInbound(
     channelSessionId: string;
     payload: unknown;
     socialMessage?: SocialMessage;
+    /**
+     * A saída é do PRÓPRIO CRM, mas não passou pelo envio do Inbox (que grava a
+     * linha antes do eco chegar): a DM privada que a automação manda a partir
+     * de um comentário nasce sem conversa. O eco dela entra como mensagem, e
+     * NÃO pausa a IA — quem respondeu foi a regra, não uma pessoa pelo celular.
+     */
+    saidaDoProprioCrm?: boolean;
   },
 ): Promise<ZernioIngestResult> {
   const lida = input.socialMessage ?? parseZernioInbound(input.payload);
@@ -213,7 +220,7 @@ export async function ingestZernioInbound(
         existente.id,
         inseridaNaExistente,
       );
-      if (input.socialMessage && msg.direction === "outbound") {
+      if (input.socialMessage && msg.direction === "outbound" && !input.saidaDoProprioCrm) {
         await pausarIaPorAtendimentoManual(admin, {
           organizationId: input.organizationId,
           conversationId: existente.id,
@@ -288,7 +295,7 @@ export async function ingestZernioInbound(
   // SAÍDA feita por fora do CRM = uma pessoa respondeu o cliente à mão (celular,
   // outra plataforma na mesma conta). A IA para nesta conversa. O eco do nosso
   // próprio envio já saiu como `"duplicate"` acima. NÃO mexe na origem do lead.
-  if (msg.direction === "outbound") {
+  if (msg.direction === "outbound" && !input.saidaDoProprioCrm) {
     await pausarIaPorAtendimentoManual(admin, {
       organizationId: input.organizationId,
       conversationId,
