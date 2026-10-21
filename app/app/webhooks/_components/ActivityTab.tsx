@@ -83,6 +83,16 @@ const MOTIVO_DA_PARADA: Record<string, string> = {
   ia_indisponivel:
     "A IA não está configurada nesta instalação — cadastre uma chave em Provedores de IA.",
   texto_vazio: "A IA não devolveu texto. Revise o contexto que você escreveu para ela.",
+  // Respostas a comentário (reply_comment / private_reply_comment) — o produtor é
+  // `lib/comentarios/responder.ts`, o mesmo caminho da tela de Comentários.
+  sem_comentario: "O evento não trouxe um comentário para responder.",
+  comentario_inexistente: "O comentário não existe mais nesta empresa.",
+  conexao_removida: "A conta em que o comentário chegou foi desconectada.",
+  canal_sem_comentarios: "Esta conexão não responde comentários.",
+  ja_respondido: "Este comentário já tinha uma resposta pública — cada um recebe uma só.",
+  ja_respondido_no_privado: "Este comentário já tinha recebido uma mensagem privada — a rede aceita só uma.",
+  prazo_da_resposta_privada_vencido:
+    "Passaram mais de 7 dias do comentário: a rede não aceita mais mensagem privada.",
   /*
    * Os motivos abaixo chegam à tela pelos mesmos dois canais que os de cima
    * (`detail.reason` e `action.error`) e NÃO tinham frase: quem opera a

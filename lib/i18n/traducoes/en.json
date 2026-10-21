@@ -9411,5 +9411,9 @@
   "Resposta publicada.": "Reply posted.",
   "Resposta pública": "Public reply",
   "Te chamei no direct! 💬": "I sent you a DM! 💬",
-  "Texto do comentário": "Comment text"
+  "Texto do comentário": "Comment text",
+  "O evento não trouxe um comentário para responder.": "The event did not bring a comment to reply to.",
+  "O comentário não existe mais nesta empresa.": "The comment no longer exists in this company.",
+  "Este comentário já tinha uma resposta pública — cada um recebe uma só.": "This comment already had a public reply — each gets only one.",
+  "Este comentário já tinha recebido uma mensagem privada — a rede aceita só uma.": "This comment had already received a private message — the network accepts only one."
 }

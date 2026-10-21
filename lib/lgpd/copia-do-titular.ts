@@ -118,6 +118,7 @@ export const O_QUE_FICA = {
   campaign_recipients: "as mensagens de campanha que ele recebeu, e por que foi ou não incluído",
   campaign_suppressions: "a exclusão dele das campanhas",
   channel_session_groups: "os grupos de WhatsApp ligados a ele",
+  social_comments: "o que ele comentou nas publicações da empresa nas redes sociais, e se foi respondido",
   group_messages_authored: "o que ele escreveu em grupos",
   conversation_drafts: "o texto escrito PARA ele por outro sistema",
   contact_field_proposals: "o dado dele que a IA ouviu na conversa e propôs gravar, e o que se decidiu",

@@ -163,6 +163,23 @@ export interface CheckpointRow {
  * (`contact_id = p_contact_id`): quando o titular do pedido É o placeholder do
  * grupo, o Art. 18 II entrega o mesmo `subject` que a anonimização apagaria.
  */
+/**
+ * Comentários do titular nas publicações das contas sociais conectadas
+ * (migration 0726). Sem FK para o contato — quem comenta pode nunca ter mandado
+ * DM —: o vínculo é `author_identity`, a mesma forma de
+ * `contacts.social_identity`, e é por ela que a redação os alcança.
+ */
+export interface SocialCommentRow {
+  id: string;
+  network: string;
+  media_external_id: string | null;
+  author_username: string | null;
+  body: string | null;
+  commented_at: string;
+  public_replied_at: string | null;
+  private_replied_at: string | null;
+}
+
 export interface ChannelSessionGroupRow {
   id: string;
   group_chat_id: string;
@@ -740,6 +757,8 @@ export interface ExportPayload {
    * export novo NÃO COMPILAR se esquecer.
    */
   channel_session_groups: ChannelSessionGroupRow[];
+  /** Ver `SocialCommentRow`. Obrigatório pela mesma razão dos irmãos. */
+  social_comments: SocialCommentRow[];
   /**
    * Mensagens que o titular escreveu em GRUPOS de WhatsApp (migration 0482).
    * Moram na conversa do placeholder do grupo, não na dele, então
@@ -1712,6 +1731,36 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
     }
   }
 
+  // Comentários — pela identidade social do contato, como a redação (0726).
+  let social_comments: SocialCommentRow[] = [];
+  if (contactId) {
+    const { data: identidade } = await admin
+      .from("contacts")
+      .select("social_identity")
+      .eq("organization_id", organizationId)
+      .eq("id", contactId)
+      .maybeSingle();
+    const socialIdentity = (identidade as { social_identity?: string | null } | null)?.social_identity;
+    if (socialIdentity) {
+      const { data, error } = await admin
+        .from("social_comments")
+        .select("id, network, media_external_id, author_username, body, commented_at, public_replied_at, private_replied_at")
+        .eq("organization_id", organizationId)
+        .eq("author_identity", socialIdentity)
+        .order("commented_at", { ascending: false })
+        .limit(500);
+      if (error) {
+        logger.warn("[lgpd-export-worker] social comments load failed", {
+          request_id: requestId,
+          error: error.message,
+        });
+      } else if (data) {
+        conferirTeto("social_comments", data, 500);
+        social_comments = data;
+      }
+    }
+  }
+
   // Mensagens de grupo escritas pelo titular — ver `group_messages_authored`.
   // Duas consultas (telefone, lid) em vez de um `or` sobre caminho JSON: cada
   // uma é um filtro simples, e a união por id desfaz a mensagem que casa as duas.
@@ -2296,6 +2345,7 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
     campaign_recipients,
     campaign_suppressions,
     channel_session_groups,
+    social_comments,
     group_messages_authored,
     conversation_drafts,
     conversation_notes,
@@ -2489,6 +2539,7 @@ function emptyPayload(
     campaign_recipients: [],
     campaign_suppressions: [],
     channel_session_groups: [],
+    social_comments: [],
     group_messages_authored: [],
     lead_notes: [],
     ai_agent_runs: [],

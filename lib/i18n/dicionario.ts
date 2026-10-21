@@ -6704,6 +6704,10 @@ export const DICIONARIO: Traducoes = {
   "Atenção: um app tem um endereço só para o Instagram. Se outra automação já recebe por este app, ela deixa de receber.": { es: "Atención: una app tiene una sola dirección para Instagram. Si otra automatización ya recibe por esta app, dejará de recibir." },
   "Prefere fazer à mão? No painel do app, em Webhooks do Instagram, cole os dois valores abaixo e assine os campos messages, messaging_seen, messaging_referral e comments.": { es: "¿Prefieres hacerlo a mano? En el panel de la app, en Webhooks de Instagram, pega los dos valores de abajo y suscribe los campos messages, messaging_seen, messaging_referral y comments." },
   // Comentários do Instagram nativo (tela, automação e API).
+  "O evento não trouxe um comentário para responder.": { es: "El evento no trajo un comentario para responder." },
+  "O comentário não existe mais nesta empresa.": { es: "El comentario ya no existe en esta empresa." },
+  "Este comentário já tinha uma resposta pública — cada um recebe uma só.": { es: "Este comentario ya tenía una respuesta pública — cada uno recibe una sola." },
+  "Este comentário já tinha recebido uma mensagem privada — a rede aceita só uma.": { es: "Este comentario ya había recibido un mensaje privado — la red acepta solo uno." },
   "(comentário sem texto)": { es: "(comentario sin texto)" },
   "@ de quem comentou": { es: "@ de quien comentó" },
   "A conta em que o comentário chegou foi desconectada.": { es: "La cuenta en la que llegó el comentario fue desconectada." },

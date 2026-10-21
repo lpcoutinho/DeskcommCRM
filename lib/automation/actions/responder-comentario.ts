@@ -21,7 +21,7 @@ function executor(type: "reply_comment" | "private_reply_comment", modo: ModoDaR
     }
     // Quem pediu para não receber mensagem não recebe DM, nem a do comentário.
     if (modo === "privado" && (ctx.context.contact as { is_blocked?: boolean } | undefined)?.is_blocked === true) {
-      return { type, status: "skipped", detail: { reason: "contato_bloqueado" } };
+      return { type, status: "skipped", detail: { reason: "contact_blocked" } };
     }
     const template = typeof config.template === "string" ? config.template : "";
     const texto = renderTemplate(template, ctx.context).trim();

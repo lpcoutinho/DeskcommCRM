@@ -76,6 +76,13 @@ const COMO_CONSERTAR =
  */
 const ORIGENS: DeclaracaoDeOrigem[] = [
   {
+    arquivo: "lib/automation/actions/responder-comentario.ts",
+    expressao: "r.motivo",
+    porque:
+      "a recusa da resposta a comentário (já respondido, prazo da DM vencido, conexão removida…) chega à tela pelo `reason` do resultado; os códigos estão escritos no tipo MotivoDeNaoResponder do produtor",
+    produtor: { arquivo: "lib/comentarios/responder.ts" },
+  },
+  {
     arquivo: "lib/automation/actions/send-ai-message.ts",
     expressao: "guarda.reason",
     porque:
