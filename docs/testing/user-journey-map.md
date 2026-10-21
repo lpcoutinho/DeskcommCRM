@@ -3174,6 +3174,15 @@ de contrato; pareamento real por código ainda requer confirmação no celular.
 - Evidência automatizada: `lib/publicacoes/{esquema,fila}.test.ts`, `lib/channels/meta-social/publicacao.test.ts`, invariantes `publicacoes-modulo.test.ts` e `publicacoes-provisionadora.test.ts`.
 - Pendente: prova pela tela num ambiente fresco com o módulo instalado, e publicação real numa conta de teste.
 
+## Comentários do Instagram — 2026-10-21
+
+- [P0] Comentário de outra pessoa numa publicação aparece em Atendimento › Comentários; comentário da própria conta não aparece.
+- [P0] Regra "comentou *eu quero* → DM com o link": a DM sai uma vez só, a conversa aparece no Inbox com o @ da pessoa, e a IA não fica pausada por causa dela.
+- [P1] Responder em público pela tela; segunda resposta (tela ou regra) é recusada com a frase; DM depois de 7 dias é recusada antes de chamar a rede.
+- [P1] Ação de comentário em outro gatilho é recusada no editor e na API.
+- Evidência automatizada: `lib/comentarios/responder.test.ts`, `lib/channels/meta-social/{webhook,comentarios}.test.ts`, `tests/unit/acoes-de-comentario.test.ts`, invariante `comentarios-sociais.test.ts`.
+- Pendente: prova pela tela num ambiente fresco, e comentário + DM privada reais numa conta de teste.
+
 ## Prospecção nativa — 2026-09-15
 
 [P0] Validado no navegador, com Next em modo produção e Supabase local: resultados comerciais semeados → escolher agente publicado, conexão, funil e duas etapas → definir oferta, critérios e ritmo → iniciar → ver contato, negócio e conversa criados → pausar a fila. Consulta do banco confirmou `paused/queued`, os três vínculos e zero mensagens. A busca paga e a entrega a pessoas reais não foram executadas neste QA. A Prospecção tem entrada direta na seção CRM do menu lateral para administradores.

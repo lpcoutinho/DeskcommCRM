@@ -16,8 +16,8 @@ Entra nesta entrega:
 - webhook do app configurado pela tela (com o ID do app) ou à mão;
 - renovação diária do token (60 dias) e saúde da conexão no vigia existente.
 
-Fica para as próximas entregas: comentários (resposta automática e DM a partir
-de comentário), publicação e agendamento de posts (módulo opcional, ADR-0002) e
+Entregas seguintes: publicação e agendamento de posts (módulo opcional,
+`docs/specs/publicacoes-nas-redes.md`) e comentários (abaixo). Fica para depois:
 Messenger.
 
 ## Modelo
@@ -94,6 +94,38 @@ segunda voltaria como envio feito fora do CRM, pausando a IA.
 - **Anti-morte:** renovação diária do token e vigia de conexão.
 - **Laço de retorno:** um envio recusado não é declarado enviado; o eco do app
   pausa a IA; opt-out impede novas respostas; o token morto vira aviso.
+
+## Comentários (migration 0726)
+
+Núcleo, como a DM: comentário é a porta por onde a pessoa chega antes de
+mandar mensagem.
+
+- **Entrada.** O webhook assina `comments`. `entry[].changes[field=comments]`
+  vira linha em `social_comments` (única por organização + `external_id`; o
+  reenvio cai no 23505). O comentário da própria conta não entra — a resposta
+  pública da regra volta por ali e dispararia a regra de novo.
+- **Evento.** O INSERT emite `comment.received` (entidade `social_comment`) pelo
+  gatilho do banco, reservado ao servidor no `emit_event`. O payload leva só
+  ids; texto e @ ficam na linha, que a cascata de LGPD alcança.
+- **Automação.** Gatilho "Quando alguém comentar numa publicação", condições
+  em `comment.body`, `comment.media_external_id` e `comment.author_username`.
+  Ações `reply_comment` (em público) e `private_reply_comment` (a DM que nasce
+  do comentário); a porta recusa as duas em qualquer outro gatilho, inclusive
+  dentro de `ai_decide`.
+- **Uma resposta por comentário.** Regra e tela passam pelo mesmo caminho
+  (`lib/comentarios/responder.ts`): a linha é levada por UPDATE condicional
+  antes de chamar a rede. DM privada só até 7 dias depois do comentário (regra
+  da Meta), e falha no privado é terminal — a chamada pode ter saído.
+- **Eco da DM privada.** Volta pelo webhook de mensagens, abre a conversa no
+  Inbox com o @ de quem comentou, e NÃO pausa a IA (quem respondeu foi a regra).
+- **Tela.** Atendimento › Comentários: lista, selos do que foi respondido e
+  resposta à mão (`agent`+).
+- **LGPD.** `author_identity` (`rede:conta:autor`, a forma de
+  `contacts.social_identity`) liga o comentário ao contato sem FK. A cascata
+  limpa texto, @ e vínculo; o export entrega os comentários.
+
+Conexão feita antes desta versão não assina `comments`: conecte de novo (ou use
+o botão de configurar o webhook do app) para os comentários começarem a chegar.
 
 ## Fontes verificadas (documentação da Meta, via Meta MCP)
 
