@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { apiClient } from "@/lib/api/client";
 import { copyToClipboard } from "@/lib/clipboard";
+import { nomeDoCanal } from "@/lib/channels/estado";
 import { useT } from "@/hooks/i18n/useT";
 import { ChannelAiAccess } from "./ChannelAiAccess";
 
@@ -223,7 +224,7 @@ export function CanalInstagramClient() {
         {conectado && (
           <div className="rounded-md border border-border bg-muted/40 p-3 text-sm">
             <p className="font-medium">
-              {estado?.display_name ?? (estado?.username ? `@${estado.username}` : "Instagram")}
+              {nomeDoCanal({ display_name: estado?.display_name }, t)}
             </p>
             <p className="text-xs text-muted-foreground">
               {estado?.status ?? "—"}

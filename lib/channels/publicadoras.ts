@@ -8,6 +8,7 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { nomeDoCanal } from "./estado";
 import { getAdapter } from "./index";
 import { channelBrand } from "./presentation";
 import type { ChannelProvider } from "./types";
@@ -50,7 +51,7 @@ export async function contasQuePublicam(
       const plataforma = typeof s.metadata?.social_platform === "string" ? s.metadata.social_platform : null;
       return {
         id: s.id,
-        nome: s.display_name ?? "Conta",
+        nome: nomeDoCanal(s),
         rede: channelBrand({ provider: s.provider, social_platform: plataforma }),
       };
     });

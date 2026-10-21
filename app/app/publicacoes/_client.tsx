@@ -238,7 +238,7 @@ function NovoPost({ contas, aoSalvar }: { contas: Conta[]; aoSalvar: () => void 
                 <button
                   type="button"
                   aria-label={t("Remover")}
-                  className="absolute right-1 top-1 rounded bg-background/80 px-1 text-xs"
+                  className="absolute right-1 top-1 rounded-md bg-background/80 px-1 text-xs"
                   onClick={() => setMidias((atual) => atual.filter((_, j) => j !== i))}
                 >
                   ✕

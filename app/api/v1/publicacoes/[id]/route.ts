@@ -31,8 +31,6 @@ export const dynamic = "force-dynamic";
 const cancelarSchema = z.object({ acao: z.literal("cancelar") });
 
 async function preparar(req: NextRequest, ctx: { params: Promise<{ id: string }> }, requestId: string) {
-  const supportDenied = await requireSupportWrite();
-  if (supportDenied) return { ok: false, resposta: supportDenied as Response } as const;
   const authz = await requireRole("manager", { requestId, resource: "publicacoes" });
   if (!authz.ok) return { ok: false, resposta: authz.response as Response } as const;
   if (!(await moduloLigado(createAdminClient(), "publicacoes"))) {
@@ -46,6 +44,9 @@ async function preparar(req: NextRequest, ctx: { params: Promise<{ id: string }>
 }
 
 export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: string }> }): Promise<Response> {
+  // Guarda de efeito ANTES de tudo, no corpo do handler (o gate de cobertura lê aqui).
+  const supportDenied = await requireSupportWrite();
+  if (supportDenied) return supportDenied;
   const requestId = randomUUID();
   const p = await preparar(req, ctx, requestId);
   if (!p.ok) return p.resposta;
@@ -115,6 +116,9 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
 }
 
 export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: string }> }): Promise<Response> {
+  // Guarda de efeito ANTES de tudo, no corpo do handler (o gate de cobertura lê aqui).
+  const supportDenied = await requireSupportWrite();
+  if (supportDenied) return supportDenied;
   const requestId = randomUUID();
   const p = await preparar(req, ctx, requestId);
   if (!p.ok) return p.resposta;

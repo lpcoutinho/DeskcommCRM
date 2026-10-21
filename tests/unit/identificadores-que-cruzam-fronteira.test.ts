@@ -170,6 +170,10 @@ const SITES: { arquivo: string; fronteira: string; papel?: "gerador" | "validado
   // package.ts. Nada de texto digitado pelo operador entra na chave.
   { arquivo: "lib/ai/skills/package-files.ts", fronteira: "storage.chave-de-objeto" },
   { arquivo: "app/api/v1/products/[id]/fotos/route.ts", fronteira: "storage.chave-de-objeto" },
+  // Módulo de publicações (0722): a mídia do post. O caminho é gerado aqui
+  // (`${orgId}/uuid.jpg|png|mp4|mov`) — UUID v4 ASCII + extensão conhecida pela
+  // lista de mimes aceitos; nada digitado pela pessoa entra na chave.
+  { arquivo: "app/api/v1/publicacoes/midias/route.ts", fronteira: "storage.chave-de-objeto" },
   // #2526: a imagem que o operador carrega na Resposta rápida. O caminho é gerado
   // aqui (`${orgId}/templates/${templateId}/uuid.jpg|png`) — a forma é a mesma do
   // registro acima: UUID v4 de alfabeto ASCII + `.jpg`/`.png` conhecido pela
