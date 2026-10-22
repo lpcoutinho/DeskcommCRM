@@ -17,7 +17,9 @@ export type ActionType =
   | "create_task"
   | "apply_task_plan"
   | "reply_comment"
-  | "private_reply_comment";
+  | "private_reply_comment"
+  // #2642 — o único destino que não é o lead: a EQUIPE.
+  | "notify_team";
 
 export const TRIGGER_LABELS: Record<TriggerEvent, string> = {
   "lead.created": "Quando entrar um contato novo (webhook)",
@@ -89,4 +91,8 @@ export const ACTION_LABELS: Record<ActionType, string> = {
   // As duas respostas a comentário: só aparecem no gatilho de comentário.
   reply_comment: "Responder o comentário em público",
   private_reply_comment: "Responder o comentário no privado (DM)",
+  // #2642 — o único destino que não é o lead. A frase diz "equipe" e não
+  // "WhatsApp" porque quem recebe é o WhatsApp cadastrado em Avisos, e quem
+  // lê a lista precisa saber que quem recebe é GENTE DA CASA, não o cliente.
+  notify_team: "Mensagem para a equipe (resumo do negócio ganho)",
 };

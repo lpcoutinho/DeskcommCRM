@@ -167,6 +167,7 @@ export const AUDIT_ACTIONS = [
   "lgpd.redact_failed",
   "lgpd.tenant_redacted",
   "lgpd.consent_changed",
+  "lgpd.art12_notice_sent",
   "lgpd.manually_approved",
   "webhook.hmac_invalid",
   // Uma rodada do cron `webhook-replay` que reprocessou ou desistiu de algum
@@ -258,6 +259,17 @@ export const AUDIT_ACTIONS = [
   // Emitida pelo worker quando houve EFEITO (tentativa de envio), nunca em
   // rodada de cron vazia.
   "prospecting.approach_sent",
+  // A BUSCA que FECHOU (spec 24). Responde "onde foram parar os resultados":
+  // total, inseridos, duplicados (já na base) e inválidos — mais a distribuição
+  // das classes do enriquecimento quando houve. Uma vez por busca, na transição
+  // para `succeeded`.
+  "prospecting.search_completed",
+  // O ENRIQUECIMENTO que RODOU (spec 24). Só quando ≥1 candidato ganhou
+  // `data.site` na rodada; metadata conta por classe, sem PII e sem URL.
+  "prospecting.site_enriched",
+  // A PERSONALIZAÇÃO que MUDOU (spec 24): voz do vendedor e vocabulário por
+  // nicho em `organizations.settings.prospeccao`. Sem segredo no metadata.
+  "prospecting.settings_updated",
   // A SAÍDA ("responda PARAR") oferecida numa mensagem automática da prospecção
   // (modo da 2ª mensagem). Sem texto, sem telefone — só os ponteiros.
   // Emitida por inbound-turn e followup-turn quando o envio é aceito.
@@ -1173,10 +1185,25 @@ export const AUDIT_ACTIONS = [
   "platform_admin.tenant_members_viewed",
   // O admin da plataforma corrigiu o e-mail de login de um membro (só hashes).
   "member.email_changed",
+
+  // #2593: o TELEFONE de uma ficha SEM número foi GRAVADO na hora, sem decisão
+  // humana, quando o agente ouviu o número na conversa — `proporDadoDoContato`
+  // só toma este caminho com `phone_number` vazio e valor em E.164, e a trava
+  // é o `phone_number is null` no UPDATE. Distinguir de `field_proposed` é o
+  // que permite responder "quantos números entraram sozinhos, e de quem".
+  "contact.field_auto_applied",
   // O gestor mudou a carteira do cliente (põe/tira o dono) pela porta
   // dedicada `PATCH /contacts/[id]/carteira` (#2591) — a escrita é do servidor,
   // então o audit é a única trilha de quem mudou o dono.
   "contact.carteira_changed",
+
+  // #2593, item 1 do CR: um administrador ligou ou desligou a escrita
+  // automática do telefone de ficha vazia (`organizations.settings.crm
+  // .telefone_de_ficha_vazia`). Precisa de código próprio porque é a DECISÃO
+  // que passa a permitir escrita sem decisão humana: quem auditar a ficha de um
+  // cliente precisa encontrar o ato administrativo que abriu a porta, e não só
+  // as gravações que ela deixou passar.
+  "crm.telefone_de_ficha_vazia_alterado",
   // O admin da plataforma exportou o INVENTÁRIO das instalações em CSV (#2777).
   // É leitura, mas é leitura EM ESCALA DE PLATAFORMA: grava quem, quando, QUANTO
   // saiu, se o teto cortou e QUE filtros valiam — nunca o texto da busca, que é
@@ -1188,6 +1215,15 @@ export const AUDIT_ACTIONS = [
   // A marca foi removida: só limpa `ai_opt_out`; a conversa segue com a trava
   // de handoff de quem a pôs.
   "contacts.always_human_unmarked",
+  // B1 (spec 24): a prévia da abordagem de prospecção foi GRAVADA no candidato
+  // (`data.previa`) para o tick reusar — deixou de ser somente leitura, logo
+  // tem trilha. `resource_id` = o candidato; o TEXTO não entra no metadata.
+  "prospecting.preview_saved",
+  // B2 (spec 24): o PREPARO AUTOMÁTICO gerou prévias sozinho (tick, sem clique).
+  // UMA linha por rodada e só quando ≥1 prévia foi gravada — rodada que não gerou
+  // nada não é mutação. Metadata: contagens e ids de campanha; o TEXTO nunca entra.
+  // Consome crédito de IA por prévia, daí a trilha: responde "por que o gasto subiu".
+  "prospecting.previews_generated",
   // A tela de Contatos devolvendo a base em CSV/vCard (#2759) — portabilidade,
   // LGPD art. 18, V. Audita o GESTO com o total de linhas e os filtros que
   // valiam, nunca o termo de busca.
@@ -1207,6 +1243,10 @@ export const AUDIT_ACTIONS = [
   // interruptores, a antecedência e o opt-in de WhatsApp). O número NÃO entra:
   // é dado de contato, e o audit é trilha legível por quem administra.
   "user.task_reminder_prefs_updated",
+  // "Sincronizar agenda do celular" (#2736): o gesto de IMPORTAR em bloco a
+  // agenda do aparelho pareado — mesmo porquê do `contacts.imported` de planilha
+  // ("quem trouxe esta base, e quando"), agora com o número de qual conexão veio.
+  "contacts.synced_from_phone",
   // O admin mudou o que os avisos do celular mostram com a tela bloqueada
   // (`settings.notificacoes`); metadata com o valor anterior e o novo.
   "notificacoes.tela_bloqueada_alterada",
@@ -1218,6 +1258,8 @@ export const AUDIT_ACTIONS = [
   "agenda.service_refresh",
   "agenda.service_resource",
   "agenda.service_unblock",
+  // Reenvio de mensagem que falhou, na mesma linha (POST /api/v1/messages/{id}/retry).
+  "message.retried",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */

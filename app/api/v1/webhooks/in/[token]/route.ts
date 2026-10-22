@@ -19,9 +19,10 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createLeadHandler, moveLeadHandler, updateLeadHandler } from "@/app/api/v1/leads/_handler";
 import type { HandlerCtx } from "@/lib/api/handlers/types";
 import { emitLeadActivity } from "@/lib/leads/activity-emitter";
+import { estamparAtribuicaoDoContato } from "@/lib/leads/atribuicao-de-anuncio";
 import { classificarLeadInicial, type ResultadoClassificacaoInicial } from "@/lib/leads/classificacao-inicial";
 import type { CreateLeadInput } from "@/lib/schemas";
-import { mapInboundPayload, verifyInboundSignature, type FieldMap } from "@/lib/webhooks/inbound";
+import { mapInboundPayload, extrairAtribuicaoDoInbound, verifyInboundSignature, type FieldMap } from "@/lib/webhooks/inbound";
 import { HEADER_ASSINATURA_DE_ENTRADA } from "@/lib/webhooks/assinatura";
 import { encontrarContatoPorTelefoneComNome } from "@/lib/channels/contato-por-telefone";
 import {
@@ -742,6 +743,35 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
         contactId = (created?.id as string | undefined) ?? undefined;
         contatoNasceuAqui = contactId !== undefined;
       }
+    }
+  }
+
+  /**
+   * A ATRIBUIÇÃO DE ANÚNCIO do lead de formulário (issues #2317 e #3149).
+   *
+   * Quem anuncia para uma landing page com formulário não tinha a origem
+   * estampada no contato: `fbclid`, `fbc`, `fbp`, `gclid`, `ad_id`, `adset_id` e
+   * `campaign_id` viravam campo personalizado do card, e `lib/conversoes` não
+   * sabia de que clique veio a venda.
+   *
+   * A entrada é `mapped.source_metadata`, e não o payload cru, para haver UM
+   * caminho só: o mapeador GENÉRICO e os DEDICADOS (Elementor, RD Station,
+   * Respondi) já entregam as chaves de anúncio ali — cada um lendo na forma do
+   * seu fornecedor. Assim o extrator (`extrairAtribuicaoDoInbound`) é o mesmo
+   * nos três, e um fornecedor novo não precisa de uma segunda regra aqui.
+   *
+   * A gravação é a MESMA função do clique-pro-WhatsApp
+   * (`estamparAtribuicaoDoContato` → `fn_estampar_atribuicao_de_anuncio`), com a
+   * guarda de primeiro toque no banco — sem regra paralela. A falha é tolerada
+   * dentro dela: perder a atribuição é ruim, perder a captação é pior.
+   *
+   * Sem contato resolvido não há onde carimbar: o envio sem telefone (e sem
+   * e-mail) segue criando o lead sem contato, como sempre.
+   */
+  if (contactId) {
+    const atribuicao = extrairAtribuicaoDoInbound(mapped.source_metadata);
+    if (atribuicao) {
+      await estamparAtribuicaoDoContato(admin, source.organization_id, contactId, atribuicao);
     }
   }
 
