@@ -29,7 +29,7 @@ apresentação já lê no canal intermediado. Capabilities: sem texto livre fora
 janela de 24h, sem modelos, sem banimento por volume, sem grupos, sem custo por
 mensagem.
 
-Colunas novas em `channel_sessions` (migration 0721 + apêndice do baseline):
+Colunas novas em `channel_sessions` (migration 0740 + apêndice do baseline):
 
 | Coluna | O que é |
 |---|---|
@@ -95,7 +95,7 @@ segunda voltaria como envio feito fora do CRM, pausando a IA.
 - **Laço de retorno:** um envio recusado não é declarado enviado; o eco do app
   pausa a IA; opt-out impede novas respostas; o token morto vira aviso.
 
-## Comentários (migration 0726)
+## Comentários (migration 0742)
 
 Núcleo, como a DM: comentário é a porta por onde a pessoa chega antes de
 mandar mensagem.

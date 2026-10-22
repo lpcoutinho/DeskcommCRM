@@ -102,7 +102,7 @@ export const ENTIDADE_ESPERADA_POR_GATILHO = {
   "lead.silent_for": "crm_lead",
   "lead.stage_stale": "crm_lead",
   // Comentário numa publicação de rede social conectada (Instagram nativo).
-  // Nasce do gatilho do banco no INSERT de `social_comments` (migration 0726),
+  // Nasce do gatilho do banco no INSERT de `social_comments` (migration 0742),
   // reservado ao servidor no `emit_event`; a entidade é o próprio comentário,
   // que o `buildContext` hidrata como `comment`.
   "comment.received": "social_comment",

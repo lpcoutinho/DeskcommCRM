@@ -1,6 +1,6 @@
 -- manifest: Comentários das redes sociais no núcleo: tabela social_comments (só o servidor escreve), o evento comment.received nascido do INSERT e reservado ao servidor no emit_event, e o passo dos comentários na cascata de LGPD
 --
--- 0726 · Comentários do Instagram nativo: o que chega, o evento e a LGPD.
+-- 0742 · Comentários do Instagram nativo: o que chega, o evento e a LGPD.
 --
 -- ─── Por que núcleo ─────────────────────────────────────────────────────────
 -- Comentário é canal de atendimento, como a DM: é a porta por onde a pessoa
@@ -142,7 +142,7 @@ begin
   -- quem o emite é o servidor (o PATCH de contatos, com a chave de serviço,
   -- depois de gravar o número), e ele alcança a origem e manda WhatsApp.
   -- Revogação do turno é fato da tomada nativa, nunca um pedido do login.
-  -- `comment.received` entra pela 0726: nasce só do INSERT em `social_comments`
+  -- `comment.received` entra pela 0742: nasce só do INSERT em `social_comments`
   -- (a ingestão do webhook), e a regra que ele acorda responde em público e
   -- manda DM. Forjado por login, seria resposta a um comentário que não chegou.
   if auth.uid() is not null and p_event_type in (
@@ -242,10 +242,10 @@ declare
   v_media_paths text[] := '{}';
   v_anon_label text;
   v_count int;
+  v_identidade_social text;
   v_variantes text[] := '{}';
   v_secao record;
   v_secoes jsonb := '{}'::jsonb;
-  v_identidade_social text;
 begin
   perform public.fn_service_lock(p_organization_id,p_contact_id);
   select is_anonymized into v_already
@@ -260,7 +260,13 @@ begin
     return jsonb_build_object('already_anonymized', true, 'counts', v_counts, 'media_paths', v_media_paths);
   end if;
 
-  v_anon_label := 'Cliente Anonimizado #' || substring(p_contact_id::text from 1 for 8);
+  -- O rótulo NÃO deriva mais do id (issue #2342): `fn_lgpd_rotulo_anonimizado`
+  -- gera um sufixo OPACO (aleatório, gravado no passo 1 abaixo). Antes, o
+  -- sufixo eram os 8 primeiros caracteres do uuid do contato — quem tem o
+  -- banco casava `Cliente Anonimizado #7a5f0011` com a linha `7a5f0011-…` e
+  -- reidentificava o titular pelo próprio rótulo (pseudonimização, não
+  -- anonimização: RGPD considerando 26, LGPD art. 12 e art. 13 §4).
+  v_anon_label := public.fn_lgpd_rotulo_anonimizado(p_contact_id);
 
   -- Seções de módulo (D8, 0485): a redação delas é do gatilho
   -- `trg_lgpd_secoes_de_modulo`, que não devolve contagem — mas a contagem é
@@ -282,7 +288,7 @@ begin
   end loop;
 
   -- A identidade social é lida ANTES do passo 1: a virada de `is_anonymized`
-  -- dispara o gatilho que a anula, e é ela que alcança os comentários (0726).
+  -- dispara o gatilho que a anula, e é ela que alcança os comentários (0742).
   select social_identity into v_identidade_social
     from contacts
     where id = p_contact_id and organization_id = p_organization_id;
@@ -338,6 +344,14 @@ begin
     media_size_bytes = null,
     media_storage_path = null,
     media_derived_text = null,
+    -- `external_id` guarda o TELEFONE do titular (número no inbound, id do
+    -- provider no outbound) e sobrevivia legível na linha que RESTA da
+    -- anonimização — a última PII viva do pedido de exclusão. Zerar não quebra
+    -- nada que dependa da coluna: o unique (organization_id, external_id)
+    -- trata NULL como distinto de todo NULL, a citação (`reply_to_message_id`)
+    -- aponta para o id da linha e não para o `external_id`, e o eco do provider
+    -- só deduplica mensagem ainda em voo — pedido de exclusão não manda nada.
+    external_id = null,
     metadata = '{}'::jsonb,
     updated_at = now()
   where organization_id = p_organization_id
@@ -668,7 +682,7 @@ begin
   get diagnostics v_count = row_count;
   v_counts := v_counts || jsonb_build_object('channel_session_groups', v_count);
 
-  -- social_comments — o texto e o @ que a pessoa escreveu em público (0726).
+  -- social_comments — o texto e o @ que a pessoa escreveu em público (0742).
   -- O comentário não tem FK para o contato: quem comenta pode nunca ter
   -- mandado DM. O vínculo é a identidade social, a mesma forma de
   -- `contacts.social_identity` (`rede:conta:participante`). A LINHA fica (as
@@ -686,6 +700,7 @@ begin
     v_count := 0;
   end if;
   v_counts := v_counts || jsonb_build_object('social_comments', v_count);
+
 
   -- 7z. as contagens das seções de módulo (calculadas antes do passo 1); o
   --     núcleo vence numa colisão de nome.

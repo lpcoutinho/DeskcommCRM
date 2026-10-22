@@ -1,5 +1,5 @@
 /**
- * COMENTÁRIOS DAS REDES SOCIAIS (migration 0726) — o que o banco garante.
+ * COMENTÁRIOS DAS REDES SOCIAIS (migration 0742) — o que o banco garante.
  *
  *  1. `social_comments` é lida pela organização e por mais ninguém, e nenhum
  *     papel do PostgREST escreve nela: quem grava é o servidor (a ingestão do

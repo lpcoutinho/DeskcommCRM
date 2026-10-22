@@ -1,5 +1,5 @@
 /**
- * MÓDULO DE PUBLICAÇÕES (ADR-0002, migration 0722) — o que o banco garante.
+ * MÓDULO DE PUBLICAÇÕES (ADR-0002, migration 0741) — o que o banco garante.
  *
  *  1. A forma da provisionadora (D2/D4/D5) é medida pelo molde, em
  *     `publicacoes-provisionadora.test.ts`.

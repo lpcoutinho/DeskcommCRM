@@ -169,7 +169,7 @@ const PROVA_DE_MODULO: Record<string, { readonly arquivo: string; readonly razao
       "imutabilidade da parcela paga (status e financial_entry_id não mudam sem o caixa) e a " +
       "recusa de FK cross-org. A leitura cross-org por contagem é medida neste arquivo.",
   },
-  // 0722 — a fila de posts do módulo de publicações.
+  // 0741 — a fila de posts do módulo de publicações.
   publicacoes_posts: {
     arquivo: "tests/invariants/publicacoes-modulo.test.ts",
     razao:

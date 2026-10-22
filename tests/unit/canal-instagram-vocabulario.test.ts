@@ -18,7 +18,7 @@ import { fonteDeTemplates } from "@/lib/channels/templates-fonte";
  * os artefatos que andam juntos.
  */
 const PROVIDER = "meta_social" as const;
-const MIGRATION = "supabase/migrations/20261022140000_0721_instagram_nativo.sql";
+const MIGRATION = "supabase/migrations/20261022230000_0740_instagram_nativo.sql";
 
 describe("canal Instagram nativo — vocabulário e seam", () => {
   it("é rede social: janela de 24h, sem modelos, sem banimento por volume, sem grupos", () => {

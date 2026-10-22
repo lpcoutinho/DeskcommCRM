@@ -9355,7 +9355,7 @@ alter table public.channel_sessions
   add column if not exists datafy_waba_id text,
   add column if not exists datafy_token_encrypted bytea;
 
--- meta_social (migration 0721, Instagram nativo pela API da Meta) — colunas do
+-- meta_social (migration 0740, Instagram nativo pela API da Meta) — colunas do
 -- provider, nullable e antes das constraints que as referenciam.
 alter table public.channel_sessions
   add column if not exists meta_social_account_id text,
@@ -9368,7 +9368,7 @@ alter table public.channel_sessions
 alter table public.channel_sessions
   add constraint channel_sessions_provider_check
   -- 'wacalls' (0233), 'zernio_social' (0368), 'datafy' (0387) e 'meta_social'
-  -- (0721) somados AQUI — UM bloco só por constraint (não duplicar drop+add por
+  -- (0740) somados AQUI — UM bloco só por constraint (não duplicar drop+add por
   -- migration).
   check (provider = any (array['waha'::text, 'meta_cloud'::text, 'zernio'::text, 'wacalls'::text, 'zernio_social'::text, 'datafy'::text, 'meta_social'::text]));
 
@@ -10208,7 +10208,7 @@ alter table public.agent_inbox_items
     -- lista pelas razões de sempre (bloco único por constraint, #159).
     'task_due',
     'task_overdue',
-    -- (migration 0722) Um post agendado do módulo de publicações não saiu: a
+    -- (migration 0741) Um post agendado do módulo de publicações não saiu: a
     -- rede recusou, a mídia não carregou ou a publicação foi interrompida.
     -- Entra NESTA lista pelas razões de sempre (bloco único por constraint, #159).
     'publicacao_falhou',
@@ -14545,7 +14545,7 @@ alter table public.webhook_events_log
     -- nasce com organization_id nulo e corpo {id,type}: é ponteiro, nunca o
     -- corpo do provedor, e fica invisível ao tenant pela própria policy.
     'stripe', 'asaas',
-    -- (migration 0721) Instagram nativo pela API da Meta.
+    -- (migration 0740) Instagram nativo pela API da Meta.
     'meta_social'
   ));
 
@@ -57683,9 +57683,9 @@ begin
 end;$$;
 notify pgrst,'reload schema';
 
--- ---- publicações nas redes: módulo opcional via ADR-0002 (migration 0722) ----
+-- ---- publicações nas redes: módulo opcional via ADR-0002 (migration 0741) ----
 -- ⚠️ ANTES DA VARREDURA anon: cria função. O porquê de cada decisão está no
--- cabeçalho de supabase/migrations/20261022150000_0722_publicacoes_modulo.sql —
+-- cabeçalho de supabase/migrations/20261022230100_0741_publicacoes_modulo.sql —
 -- criar a função aqui NÃO cria tabela nenhuma; a tabela e o bucket só nascem
 -- quando um administrador da instalação chama fn_modulo_instalar('publicacoes', ...).
 -- O `kind` `publicacao_falhou` está no bloco único de agent_inbox_items_kind_check.
@@ -57837,7 +57837,7 @@ begin
   end if;
 
   -- Interrompido no meio NÃO volta à fila: a rede pode ter publicado antes da
-  -- queda, e publicar em dobro é pior que não publicar (ver cabeçalho da 0722).
+  -- queda, e publicar em dobro é pior que não publicar (ver cabeçalho da 0741).
   -- E avisa na Central, como toda falha da fila: sem o aviso, o post sumiria
   -- da agenda em silêncio.
   with presos as (
@@ -57879,7 +57879,7 @@ $f$;
 revoke execute on function public.fn_publicacoes_reivindicar(integer, uuid[]) from public, anon, authenticated;
 grant execute on function public.fn_publicacoes_reivindicar(integer, uuid[]) to service_role;
 
--- ---- comentários das redes sociais no núcleo (migration 0726) ----
+-- ---- comentários das redes sociais no núcleo (migration 0742) ----
 -- Racional no cabeçalho da migration. Antes da VARREDURA anon: cria função.
 create table if not exists public.social_comments (
   id uuid primary key default gen_random_uuid(),
@@ -57998,7 +57998,7 @@ begin
   -- quem o emite é o servidor (o PATCH de contatos, com a chave de serviço,
   -- depois de gravar o número), e ele alcança a origem e manda WhatsApp.
   -- Revogação do turno é fato da tomada nativa, nunca um pedido do login.
-  -- `comment.received` entra pela 0726: nasce só do INSERT em `social_comments`
+  -- `comment.received` entra pela 0742: nasce só do INSERT em `social_comments`
   -- (a ingestão do webhook), e a regra que ele acorda responde em público e
   -- manda DM. Forjado por login, seria resposta a um comentário que não chegou.
   if auth.uid() is not null and p_event_type in (
@@ -58097,10 +58097,10 @@ declare
   v_media_paths text[] := '{}';
   v_anon_label text;
   v_count int;
+  v_identidade_social text;
   v_variantes text[] := '{}';
   v_secao record;
   v_secoes jsonb := '{}'::jsonb;
-  v_identidade_social text;
 begin
   perform public.fn_service_lock(p_organization_id,p_contact_id);
   select is_anonymized into v_already
@@ -58115,7 +58115,13 @@ begin
     return jsonb_build_object('already_anonymized', true, 'counts', v_counts, 'media_paths', v_media_paths);
   end if;
 
-  v_anon_label := 'Cliente Anonimizado #' || substring(p_contact_id::text from 1 for 8);
+  -- O rótulo NÃO deriva mais do id (issue #2342): `fn_lgpd_rotulo_anonimizado`
+  -- gera um sufixo OPACO (aleatório, gravado no passo 1 abaixo). Antes, o
+  -- sufixo eram os 8 primeiros caracteres do uuid do contato — quem tem o
+  -- banco casava `Cliente Anonimizado #7a5f0011` com a linha `7a5f0011-…` e
+  -- reidentificava o titular pelo próprio rótulo (pseudonimização, não
+  -- anonimização: RGPD considerando 26, LGPD art. 12 e art. 13 §4).
+  v_anon_label := public.fn_lgpd_rotulo_anonimizado(p_contact_id);
 
   -- Seções de módulo (D8, 0485): a redação delas é do gatilho
   -- `trg_lgpd_secoes_de_modulo`, que não devolve contagem — mas a contagem é
@@ -58137,7 +58143,7 @@ begin
   end loop;
 
   -- A identidade social é lida ANTES do passo 1: a virada de `is_anonymized`
-  -- dispara o gatilho que a anula, e é ela que alcança os comentários (0726).
+  -- dispara o gatilho que a anula, e é ela que alcança os comentários (0742).
   select social_identity into v_identidade_social
     from contacts
     where id = p_contact_id and organization_id = p_organization_id;
@@ -58193,6 +58199,14 @@ begin
     media_size_bytes = null,
     media_storage_path = null,
     media_derived_text = null,
+    -- `external_id` guarda o TELEFONE do titular (número no inbound, id do
+    -- provider no outbound) e sobrevivia legível na linha que RESTA da
+    -- anonimização — a última PII viva do pedido de exclusão. Zerar não quebra
+    -- nada que dependa da coluna: o unique (organization_id, external_id)
+    -- trata NULL como distinto de todo NULL, a citação (`reply_to_message_id`)
+    -- aponta para o id da linha e não para o `external_id`, e o eco do provider
+    -- só deduplica mensagem ainda em voo — pedido de exclusão não manda nada.
+    external_id = null,
     metadata = '{}'::jsonb,
     updated_at = now()
   where organization_id = p_organization_id
@@ -58523,7 +58537,7 @@ begin
   get diagnostics v_count = row_count;
   v_counts := v_counts || jsonb_build_object('channel_session_groups', v_count);
 
-  -- social_comments — o texto e o @ que a pessoa escreveu em público (0726).
+  -- social_comments — o texto e o @ que a pessoa escreveu em público (0742).
   -- O comentário não tem FK para o contato: quem comenta pode nunca ter
   -- mandado DM. O vínculo é a identidade social, a mesma forma de
   -- `contacts.social_identity` (`rede:conta:participante`). A LINHA fica (as
@@ -58541,6 +58555,7 @@ begin
     v_count := 0;
   end if;
   v_counts := v_counts || jsonb_build_object('social_comments', v_count);
+
 
   -- 7z. as contagens das seções de módulo (calculadas antes do passo 1); o
   --     núcleo vence numa colisão de nome.
@@ -61476,7 +61491,7 @@ revoke all on public.external_db_connections_safe from anon;
 grant select on public.external_db_connections_safe to authenticated;
 
 
--- ---- Instagram nativo pela API da Meta: provider meta_social (migration 0721) ----
+-- ---- Instagram nativo pela API da Meta: provider meta_social (migration 0740) ----
 -- As colunas e os dois CHECKs de `channel_sessions` estão no bloco ÚNICO das
 -- constraints, lá em cima (procure por `channel_sessions_provider_check`), e o
 -- `meta_social` no bloco único de `webhook_events_log_provider_check`. Aqui fica

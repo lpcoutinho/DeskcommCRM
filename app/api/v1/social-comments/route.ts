@@ -2,7 +2,7 @@
  * GET /api/v1/social-comments — os comentários recebidos nas publicações das
  * contas sociais conectadas, mais novos primeiro.
  *
- * Leitura pelo client de SESSÃO: a RLS da 0726 entrega só os da organização de
+ * Leitura pelo client de SESSÃO: a RLS da 0742 entrega só os da organização de
  * quem pede. `?antes=<ISO>` pagina para trás pela hora do comentário.
  */
 import { randomUUID } from "node:crypto";

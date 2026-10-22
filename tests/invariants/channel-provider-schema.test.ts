@@ -85,7 +85,7 @@ describe("0087 · o canal da sessão chega ao clone", () => {
     ]);
   });
 
-  it("as três colunas do ramo meta_social (0721, Instagram nativo) existem — e só elas", () => {
+  it("as três colunas do ramo meta_social (0740, Instagram nativo) existem — e só elas", () => {
     // Prefixo próprio, cerca própria: são de OUTRO provider (redes da Meta que
     // não são WhatsApp), e a cerca do ramo oficial acima as exclui por isso.
     const cols = sql(`select column_name from information_schema.columns

@@ -6,7 +6,7 @@
  * Módulo opcional (ADR-0002): sem o módulo instalado as rotas respondem 404
  * (`moduloLigado`), e a tabela nem existe.
  *
- * ⚠️ CLIENT DE SESSÃO para a tabela: a RLS por operação (0722) já exige
+ * ⚠️ CLIENT DE SESSÃO para a tabela: a RLS por operação (0741) já exige
  * `manager` para escrever e proíbe a sessão de escrever `publicando`/`publicado`.
  * A rota cobra o mesmo degrau por clareza de mensagem, não como segunda régua.
  * O client de serviço entra só para assinar a prévia da mídia (bucket sem policy)

@@ -16,7 +16,7 @@ export const dynamic = "force-dynamic";
  *
  * Sem o módulo instalado a tela não existe (404), como a porta do menu.
  * `viewer` lê a agenda; criar, agendar, cancelar e apagar exige `manager`+ —
- * publicar fala pela marca em público. A RLS da 0722 tem a mesma régua.
+ * publicar fala pela marca em público. A RLS da 0741 tem a mesma régua.
  */
 export default async function Page() {
   const user = await requireAuth();

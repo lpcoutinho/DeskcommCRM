@@ -112,7 +112,7 @@ const TABELAS_NA_CASCATA = [
   // que o expurgo não alcançava. Prova de comportamento em
   // `lgpd-alcanca-prospeccao-de-quem-ja-era-contato.test.ts`.
   "prospecting_candidates",
-  // 0726 — o texto e o @ do comentário numa publicação. Sem FK para
+  // 0742 — o texto e o @ do comentário numa publicação. Sem FK para
   // `contacts` (quem comenta pode nunca ter mandado DM): o vínculo é
   // `author_identity`, a mesma forma de `contacts.social_identity`, lida antes
   // do passo 1. Nenhum gate automático a alcança; é esta catraca que a segura.
@@ -137,7 +137,7 @@ const TIPOS_RESERVADOS = [
   "ai.case_closed", //               0279
   "ai.case_opened", //               0279
   "appointment.outcome_confirmed", //herdado
-  "comment.received", //             0726 — só o INSERT em social_comments o emite
+  "comment.received", //             0742 — só o INSERT em social_comments o emite
   "contact.birthday", //             0551
   "contact.phone_added", //          0670
   "conversation.autonomous_turn_revoked", //0594 — revogação nativa, sessão não pode forjar

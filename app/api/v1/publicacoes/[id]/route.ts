@@ -7,7 +7,7 @@
  * (contador, container e erro limpos), porque a pessoa mudou algo — ou decidiu
  * tentar de novo depois de conferir o perfil.
  *
- * Post publicado ou publicando não é editável nem apagável: a RLS da 0722
+ * Post publicado ou publicando não é editável nem apagável: a RLS da 0741
  * recusa, e a rota responde 409 com a frase em vez de "0 linhas".
  */
 import { randomUUID } from "node:crypto";

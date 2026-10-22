@@ -43,7 +43,7 @@
  * essas duas chaves (`semAsChavesDoDoc110`), o que prova que nenhuma outra
  * mudou, e um caso à parte cobra que as duas estão lá.
  *
- * Quarta exceção do mesmo tipo, e também sem regravar fixture: a migration 0726
+ * Quarta exceção do mesmo tipo, e também sem regravar fixture: a migration 0742
  * pôs os comentários das redes sociais na cascata de LGPD, e o que se apaga a
  * pedido do titular se entrega a pedido dele — `social_comments` é seção NOVA
  * do `data.json`, em todo país. Mesmo tratamento das chaves do doc 110: sai
@@ -328,7 +328,7 @@ describe("data.json e PDF de acesso", () => {
   it("Brasil: o data.json é o de antes, sem `lei_rotulo` nem `fuso` — fora as duas chaves do doc 110", async () => {
     const { vazio, cheio } = await dataJson(null, "America/Sao_Paulo");
     expect(comoGravado(semAsSecoesNovas(vazio))).toBe(fixture("data-vazio.json"));
-    // Migration 0726: os comentários do titular, seção nova — vazia sem contato.
+    // Migration 0742: os comentários do titular, seção nova — vazia sem contato.
     expect(vazio.social_comments).toEqual([]);
     expect(cheio.social_comments).toEqual([]);
     expect(comoGravado(semAsChavesDoDoc110(cheio))).toBe(fixture("data-cheio.json"));

@@ -165,7 +165,7 @@ export interface CheckpointRow {
  */
 /**
  * Comentários do titular nas publicações das contas sociais conectadas
- * (migration 0726). Sem FK para o contato — quem comenta pode nunca ter mandado
+ * (migration 0742). Sem FK para o contato — quem comenta pode nunca ter mandado
  * DM —: o vínculo é `author_identity`, a mesma forma de
  * `contacts.social_identity`, e é por ela que a redação os alcança.
  */
@@ -1731,7 +1731,7 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
     }
   }
 
-  // Comentários — pela identidade social do contato, como a redação (0726).
+  // Comentários — pela identidade social do contato, como a redação (0742).
   let social_comments: SocialCommentRow[] = [];
   if (contactId) {
     const { data: identidade } = await admin

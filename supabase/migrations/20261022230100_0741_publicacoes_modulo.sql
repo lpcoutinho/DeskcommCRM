@@ -1,6 +1,6 @@
 -- manifest: Módulo opcional de publicações (ADR-0002): agendar e publicar posts nas redes conectadas — provisionadora da tabela e do bucket, claim da fila e o aviso publicacao_falhou na Central
 --
--- 0722 · Publicações nas redes sociais, como MÓDULO DE TABELA (ADR-0002).
+-- 0741 · Publicações nas redes sociais, como MÓDULO DE TABELA (ADR-0002).
 --
 -- ─── Por que módulo, e não núcleo ───────────────────────────────────────────
 -- A régua da doutrina de extensões: se nenhuma organização ativar isto, a
@@ -84,7 +84,7 @@ alter table public.agent_inbox_items
     'email_de_login_trocado',
     'task_due',
     'task_overdue',
-    -- (migration 0722) Um post agendado não saiu: a rede recusou, a mídia não
+    -- (migration 0741) Um post agendado não saiu: a rede recusou, a mídia não
     -- carregou ou a publicação foi interrompida. Sem isto a pessoa só descobria
     -- olhando o Instagram no dia seguinte.
     'publicacao_falhou',
@@ -238,7 +238,7 @@ begin
   end if;
 
   -- Interrompido no meio NÃO volta à fila: a rede pode ter publicado antes da
-  -- queda, e publicar em dobro é pior que não publicar (ver cabeçalho da 0722).
+  -- queda, e publicar em dobro é pior que não publicar (ver cabeçalho da 0741).
   -- E avisa na Central, como toda falha da fila: sem o aviso, o post sumiria
   -- da agenda em silêncio.
   with presos as (
