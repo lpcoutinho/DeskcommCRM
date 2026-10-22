@@ -141,6 +141,7 @@ export const CHANNEL_CAPABILITIES: Record<ProviderDeMensagem, ChannelCapabilitie
     groups: "none",
     costPerMessage: false,
     alteraMensagemEnviada: false,
+    phonebook: false,
   },
 };
 
