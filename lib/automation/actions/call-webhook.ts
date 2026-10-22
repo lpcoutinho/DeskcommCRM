@@ -219,6 +219,22 @@ const LEAD_PUBLIC_FIELDS = [
   "created_at",
 ] as const;
 
+/**
+ * O comentário (gatilho `comment.received`), lido da linha ATUAL que o motor
+ * hidrata — o payload do evento só tem ids, e a cascata de LGPD alcança a linha.
+ */
+const COMMENT_PUBLIC_FIELDS = [
+  "id",
+  "network",
+  "external_id",
+  "media_external_id",
+  "media_product_type",
+  "parent_external_id",
+  "author_username",
+  "body",
+  "commented_at",
+] as const;
+
 const CONTACT_PUBLIC_FIELDS = [
   "id",
   "name",
@@ -413,6 +429,7 @@ export async function executeCallWebhook(
 
   const leadPublic = projectPublicFields(ctx.context.lead, LEAD_PUBLIC_FIELDS);
   const contactPublic = projectPublicFields(ctx.context.contact, CONTACT_PUBLIC_FIELDS);
+  const commentPublic = projectPublicFields(ctx.context.comment, COMMENT_PUBLIC_FIELDS);
   const ownerPublic = await responsavelPublico(ctx, config);
   const compromissoPublic = localDoCompromisso(ctx.context.appointment);
   const entrega = idDaEntrega(ctx.event.id, ctx.ruleId, ctx.actionIndex ?? 0, ctx.ruleActions ?? []);
@@ -425,6 +442,7 @@ export async function executeCallWebhook(
       ...payloadPublico(ctx.event.event_type, ctx.event.payload ?? {}),
       ...(leadPublic ? { lead: leadPublic } : {}),
       ...(contactPublic ? { contact: contactPublic } : {}),
+      ...(commentPublic ? { comment: commentPublic } : {}),
       ...(compromissoPublic ?? {}),
       // Só com `include_owner: true` (#1612) — ver `responsavelPublico`.
       ...(ownerPublic ? { owner: ownerPublic } : {}),

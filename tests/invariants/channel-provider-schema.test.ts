@@ -70,7 +70,8 @@ describe("0087 · o canal da sessão chega ao clone", () => {
   it("as três colunas do ramo meta_cloud existem", () => {
     const cols = sql(`select column_name from information_schema.columns
                        where table_schema = 'public' and table_name = 'channel_sessions'
-                         and column_name like 'meta\\_%' order by 1`).split("\n");
+                         and column_name like 'meta\\_%'
+                         and column_name not like 'meta\\_social\\_%' order by 1`).split("\n");
     // As três `meta_webhook_override_*` (migration 0311) entraram de propósito: são o
     // desfecho do registro do webhook do número ao conectar o canal oficial. A cerca
     // continua valendo — ela existe para pegar coluna que entrou SEM querer.
@@ -81,6 +82,19 @@ describe("0087 · o canal da sessão chega ao clone", () => {
       "meta_webhook_override_em",
       "meta_webhook_override_erro",
       "meta_webhook_override_uri",
+    ]);
+  });
+
+  it("as três colunas do ramo meta_social (0740, Instagram nativo) existem — e só elas", () => {
+    // Prefixo próprio, cerca própria: são de OUTRO provider (redes da Meta que
+    // não são WhatsApp), e a cerca do ramo oficial acima as exclui por isso.
+    const cols = sql(`select column_name from information_schema.columns
+                       where table_schema = 'public' and table_name = 'channel_sessions'
+                         and column_name like 'meta\\_social\\_%' order by 1`).split("\n");
+    expect(cols).toEqual([
+      "meta_social_account_id",
+      "meta_social_token_encrypted",
+      "meta_social_token_expires_at",
     ]);
   });
 

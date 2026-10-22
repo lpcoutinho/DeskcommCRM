@@ -10,6 +10,7 @@ import {
 } from "react";
 import { Providers } from "@/app/providers";
 import { definirOrgDaAba } from "@/lib/auth/org-da-aba";
+import { encerrarPushDesteAparelho } from "@/lib/notifications/push_client";
 import { createClient, resetRealtimeAuthentication } from "@/lib/supabase/browser";
 import type { AuthUser, ActiveOrg, Role } from "@/lib/auth/types";
 import { ROLE_RANK } from "@/lib/auth/types";
@@ -91,6 +92,9 @@ export function AuthProvider({
       refreshing,
       signOut: async () => {
         resetRealtimeAuthentication();
+        // Antes da action: o DELETE da inscrição precisa do cookie que ela
+        // apaga. `encerrarPushDesteAparelho` nunca lança, então não segura a saída.
+        await encerrarPushDesteAparelho();
         const { signOut } = await import("@/app/actions/auth/signOut");
         await signOut();
       },

@@ -7,12 +7,14 @@ import { useSyncExternalStore } from "react";
 import { Card } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { useNotificationPermission } from "@/hooks/notifications/useNotificationPermission";
+import { encerrarPushDesteAparelho, syncPushSubscription } from "@/lib/notifications/push_client";
 import {
   NOTIFY_UI_CATEGORIES,
   assinarPrefs,
   getPrefsSnapshot,
   getPrefsSnapshotDoServidor,
   gravarCanal,
+  pushEfetivo,
   type NotifyCategory,
   type NotifyChannelPref,
 } from "@/lib/notifications/prefs";
@@ -41,6 +43,10 @@ export function NotificationPrefsClient() {
       }
     }
     gravarCanal(category, channel, on);
+    // O push de mensagem é o interruptor do aparelho (`pushEfetivo`).
+    if (category === "message" && channel === "push") {
+      void (on ? syncPushSubscription() : encerrarPushDesteAparelho());
+    }
   }
 
   return (
@@ -66,6 +72,11 @@ export function NotificationPrefsClient() {
                     )}
                   </p>
                 ) : null}
+                {cat === "message" ? (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {t("Desligar o push de mensagem desliga todos os avisos deste aparelho fora do app.")}
+                  </p>
+                ) : null}
               </td>
               <td className="px-4 py-3 text-center">
                 <Switch checked={false} disabled aria-label={`${t(LABELS[cat])} via email`} />
@@ -79,8 +90,8 @@ export function NotificationPrefsClient() {
               </td>
               <td className="px-4 py-3 text-center">
                 <Switch
-                  checked={prefs[cat].push}
-                  disabled={denied || unsupported}
+                  checked={pushEfetivo(prefs, cat, "push")}
+                  disabled={denied || unsupported || (cat !== "message" && !prefs.message.push)}
                   onCheckedChange={(on) => void onToggle(cat, "push", on)}
                   aria-label={`${t(LABELS[cat])} via push`}
                   data-testid={cat === "message" ? (prefs.message.push ? "alerts-toggle" : "alerts-enable") : undefined}

@@ -188,6 +188,9 @@ describe("hubSections", () => {
       "/app/tasks/planos",
       "/app/calls",
       "/app/comandas",
+      // Módulo de publicações (ADR-0002): posts atraem o cliente, então a porta
+      // cai em "Preparar a venda", antes do catálogo.
+      "/app/publicacoes",
       "/app/products",
       "/app/imports",
       "/app/settings/tenant/pipelines",

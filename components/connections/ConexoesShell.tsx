@@ -5,6 +5,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 import { RedesSociaisClient } from "./RedesSociaisClient";
 import { CanalGraphParceiroClient } from "./CanalGraphParceiroClient";
+import { CanalInstagramClient } from "./CanalInstagramClient";
 import { CanalOficialClient } from "./CanalOficialClient";
 import { CanalParceiroClient } from "./CanalParceiroClient";
 import { CanalVozClient } from "./CanalVozClient";
@@ -60,6 +61,10 @@ export function ConexoesShell({
   const aba =
     abaParam === "sociais"
       ? "sociais"
+      : abaParam === "instagram"
+      ? "instagram"
+      : abaParam === "facebook"
+      ? "facebook"
       : abaParam === "oficial"
       ? "oficial"
       : abaParam === "parceiro"
@@ -105,6 +110,10 @@ export function ConexoesShell({
         <TabsTrigger value="parceiro">{t("Provedor parceiro")}</TabsTrigger>
         <TabsTrigger value="telefonia">{t("Telefone")}</TabsTrigger>
         <TabsTrigger value="sociais">{t("Redes sociais")}</TabsTrigger>
+        {/* A rede, não o transporte: quem tem o próprio app na Meta reconhece
+            "Instagram"; o intermediário mora na aba de redes sociais. */}
+        <TabsTrigger value="instagram">Instagram</TabsTrigger>
+        <TabsTrigger value="facebook">Facebook</TabsTrigger>
         <TabsTrigger value="voz">{t("Chamada de voz")}</TabsTrigger>
         {graphParceiro && <TabsTrigger value="graph">{graphParceiro.label}</TabsTrigger>}
       </TabsList>
@@ -117,6 +126,12 @@ export function ConexoesShell({
         <TelefoniaClient />
       </TabsContent>
       <TabsContent value="sociais" className="mt-0"><RedesSociaisClient /></TabsContent>
+      <TabsContent value="instagram" className="mt-0">
+        <CanalInstagramClient rede="instagram" />
+      </TabsContent>
+      <TabsContent value="facebook" className="mt-0">
+        <CanalInstagramClient rede="facebook" />
+      </TabsContent>
 
       <TabsContent value="voz" className="mt-0">
         <CanalVozClient wacallsConfigured={wacallsConfigured} />

@@ -42,6 +42,13 @@
  * segue o gravado em c85293f05: o payload brasileiro é comparado a ele SEM
  * essas duas chaves (`semAsChavesDoDoc110`), o que prova que nenhuma outra
  * mudou, e um caso à parte cobra que as duas estão lá.
+ *
+ * Quarta exceção do mesmo tipo, e também sem regravar fixture: a migration 0742
+ * pôs os comentários das redes sociais na cascata de LGPD, e o que se apaga a
+ * pedido do titular se entrega a pedido dele — `social_comments` é seção NOVA
+ * do `data.json`, em todo país. Mesmo tratamento das chaves do doc 110: sai
+ * antes da comparação byte a byte (`semAsSecoesNovas`) e um caso cobra que ela
+ * está lá.
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -193,7 +200,10 @@ const comoGravado = (p: ExportPayload) => JSON.stringify({ ...p, generated_at: "
 
 /** O payload brasileiro menos as duas chaves que o doc 110 (2A) acrescentou — ver o cabeçalho. */
 const semAsChavesDoDoc110 = ({ messages_completas: _m, secoes_no_limite: _s, ...resto }: ExportPayload) =>
-  resto as ExportPayload;
+  semAsSecoesNovas(resto as ExportPayload);
+
+/** As seções que entraram no export DEPOIS do fixture, cada uma por uma cascata nova — ver o cabeçalho. */
+const semAsSecoesNovas = ({ social_comments: _c, ...resto }: ExportPayload) => resto as ExportPayload;
 
 function textos(no: ReactNode): string[] {
   if (no === null || no === undefined || typeof no === "boolean") return [];
@@ -317,7 +327,10 @@ describe("alarme ao encarregado", () => {
 describe("data.json e PDF de acesso", () => {
   it("Brasil: o data.json é o de antes, sem `lei_rotulo` nem `fuso` — fora as duas chaves do doc 110", async () => {
     const { vazio, cheio } = await dataJson(null, "America/Sao_Paulo");
-    expect(comoGravado(vazio)).toBe(fixture("data-vazio.json"));
+    expect(comoGravado(semAsSecoesNovas(vazio))).toBe(fixture("data-vazio.json"));
+    // Migration 0742: os comentários do titular, seção nova — vazia sem contato.
+    expect(vazio.social_comments).toEqual([]);
+    expect(cheio.social_comments).toEqual([]);
     expect(comoGravado(semAsChavesDoDoc110(cheio))).toBe(fixture("data-cheio.json"));
     // Doc 110, 2A: as duas chaves que a trava do doc 88 segurava, e só elas.
     expect(cheio.messages_completas).toEqual([]);
@@ -326,6 +339,7 @@ describe("data.json e PDF de acesso", () => {
     expect(Object.keys(JSON.parse(comoGravado(cheio))).filter((k) => !gravadas.includes(k))).toEqual([
       "messages_completas",
       "secoes_no_limite",
+      "social_comments",
     ]);
     for (const p of [vazio, cheio]) {
       expect(Object.keys(p)).not.toContain("lei_rotulo");

@@ -76,6 +76,13 @@ const COMO_CONSERTAR =
  */
 const ORIGENS: DeclaracaoDeOrigem[] = [
   {
+    arquivo: "lib/automation/actions/responder-comentario.ts",
+    expressao: "r.motivo",
+    porque:
+      "a recusa da resposta a comentário (já respondido, prazo da DM vencido, conexão removida…) chega à tela pelo `reason` do resultado; os códigos estão escritos no tipo MotivoDeNaoResponder do produtor",
+    produtor: { arquivo: "lib/comentarios/responder.ts" },
+  },
+  {
     arquivo: "lib/automation/actions/send-ai-message.ts",
     expressao: "guarda.reason",
     porque:
@@ -130,6 +137,20 @@ const ORIGENS: DeclaracaoDeOrigem[] = [
     porque:
       "a resposta da IA que não virou escolha (JSON vazio, sem JSON, escolha ausente ou fora do conjunto) chega aos dois canais pelo `reason` da decisão; os códigos possíveis são escritos no tipo MotivoDaDecisao, no produtor declarado ao lado",
     produtor: { arquivo: "lib/automation/decider.ts" },
+  },
+  {
+    arquivo: "lib/automation/actions/notify-team.ts",
+    expressao: "motivo",
+    porque:
+      "o resumo vazio devolve o motivo por `resumoVazio(motivo)`, e ele chega à tela como `reason` do resultado; os códigos possíveis são os literais do próprio arquivo, varridos no produtor declarado ao lado",
+    produtor: { arquivo: "lib/automation/actions/notify-team.ts" },
+  },
+  {
+    arquivo: "lib/automation/actions/notify-team.ts",
+    expressao: "bloqueio",
+    porque:
+      "o bloqueio vem de `motivoDeBloqueioDoCanal(canal)` (arquivado, pausado, desligado, sem provedor, sem texto livre) e é devolvido como `reason` do resultado",
+    produtor: { arquivo: "lib/automation/actions/notify-team.ts" },
   },
   {
     arquivo: "lib/automation/actions/send-email.ts",

@@ -1,7 +1,14 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import { acoesQueFechamLaco, MENSAGEM_DO_LACO_DE_LEAD } from "@/lib/schemas/webhooks";
+import {
+  ACOES_NO_GATILHO_DE_COMENTARIO,
+  acoesDeComentarioForaDoGatilho,
+  acoesQueFechamLaco,
+  GATILHO_DE_COMENTARIO,
+  MENSAGEM_DA_ACAO_DE_COMENTARIO,
+  MENSAGEM_DO_LACO_DE_LEAD,
+} from "@/lib/schemas/webhooks";
 import { cn } from "@/lib/utils";
 import { useT } from "@/hooks/i18n/useT";
 import { ACTION_LABELS, type ActionType } from "@/app/app/webhooks/_components/labels";
@@ -74,7 +81,14 @@ export function PaletaDaAutomacao({ evento, temCondicoes, onAdd, variant = "desk
           tipo,
           VISUAL_DA_ACAO[tipo],
           t(ACTION_LABELS[tipo]),
-          acoesQueFechamLaco(evento, [{ type: tipo }]).length > 0 ? t(MENSAGEM_DO_LACO_DE_LEAD) : null,
+          acoesQueFechamLaco(evento, [{ type: tipo }]).length > 0
+            ? t(MENSAGEM_DO_LACO_DE_LEAD)
+            : acoesDeComentarioForaDoGatilho(evento, [{ type: tipo }]).length > 0
+              ? t(MENSAGEM_DA_ACAO_DE_COMENTARIO)
+              : evento === GATILHO_DE_COMENTARIO &&
+                  !(ACOES_NO_GATILHO_DE_COMENTARIO as readonly string[]).includes(tipo)
+                ? t("O comentário não traz negócio nem telefone: esta ação não teria em quem agir.")
+                : null,
         ),
       )}
       <p className="px-1 pt-3 text-xs text-text-muted">

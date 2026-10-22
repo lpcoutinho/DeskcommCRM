@@ -52,6 +52,12 @@ vi.mock("@/hooks/notifications/useNotificationPermission", () => ({
   }),
 }));
 
+const pushClient = vi.hoisted(() => ({
+  encerrarPushDesteAparelho: vi.fn(async () => {}),
+  syncPushSubscription: vi.fn(async () => {}),
+}));
+vi.mock("@/lib/notifications/push_client", () => pushClient);
+
 const CHAVE = "notify.prefs.v1";
 
 let NotificationPrefsClient: typeof NotificationPrefsClientType;
@@ -72,6 +78,8 @@ beforeEach(async () => {
 afterEach(() => {
   document.body.innerHTML = "";
   vi.restoreAllMocks();
+  pushClient.encerrarPushDesteAparelho.mockClear();
+  pushClient.syncPushSubscription.mockClear();
 });
 
 /** O que o servidor Node (sem `window`) produz — `renderToStaticMarkup` nunca roda efeito. */
@@ -152,5 +160,57 @@ describe("as preferências de notificação não divergem entre o SSR e a primei
     });
 
     expect(container.innerHTML).toContain('data-testid="alerts-enable"');
+  });
+});
+
+describe("o interruptor de Push de mensagem liga e desliga a inscrição do aparelho", () => {
+  async function clicar(container: HTMLElement, rotulo: string) {
+    const botao = container.querySelector(`[aria-label="${rotulo}"]`) as HTMLElement;
+    await act(async () => {
+      botao.click();
+    });
+  }
+
+  it("desligar encerra o push deste aparelho", async () => {
+    const container = montar();
+    await clicar(container, "Nova mensagem via push");
+    expect(pushClient.encerrarPushDesteAparelho).toHaveBeenCalledTimes(1);
+    expect(pushClient.syncPushSubscription).not.toHaveBeenCalled();
+  });
+
+  it("religar com a permissão concedida reinscreve o aparelho", async () => {
+    window.localStorage.setItem(CHAVE, JSON.stringify({ message: { in_app: true, push: false } }));
+    const container = montar();
+    await clicar(container, "Nova mensagem via push");
+    expect(pushClient.syncPushSubscription).toHaveBeenCalledTimes(1);
+    expect(pushClient.encerrarPushDesteAparelho).not.toHaveBeenCalled();
+  });
+
+  it("outras categorias e o in-app não mexem na inscrição", async () => {
+    const container = montar();
+    await clicar(container, "Lead ganho via push");
+    await clicar(container, "Nova mensagem via in_app");
+    expect(pushClient.encerrarPushDesteAparelho).not.toHaveBeenCalled();
+    expect(pushClient.syncPushSubscription).not.toHaveBeenCalled();
+  });
+
+  // A inscrição é do aparelho e o servidor não separa categorias: sem ela,
+  // nenhum push chega. A tela não pode mostrar os outros como ligados.
+  it("com o push de mensagem desligado, os outros pushes aparecem desligados e travados, com o porquê", () => {
+    window.localStorage.setItem(CHAVE, JSON.stringify({ message: { in_app: true, push: false } }));
+    const container = montar();
+    const lead = container.querySelector('[aria-label="Lead ganho via push"]') as HTMLButtonElement;
+    expect(lead.getAttribute("aria-checked")).toBe("false");
+    expect(lead.disabled).toBe(true);
+    expect(container.textContent).toContain(
+      "Desligar o push de mensagem desliga todos os avisos deste aparelho fora do app.",
+    );
+  });
+
+  it("com o push de mensagem ligado, os outros pushes seguem a própria preferência (controle)", () => {
+    const container = montar();
+    const lead = container.querySelector('[aria-label="Lead ganho via push"]') as HTMLButtonElement;
+    expect(lead.getAttribute("aria-checked")).toBe("true");
+    expect(lead.disabled).toBe(false);
   });
 });

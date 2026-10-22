@@ -48,7 +48,7 @@ interface ConversaEmbed {
  * banco — o chamador (caminho secundário) trata como "não responder".
  */
 export async function decidirElegibilidadeDaConversaViaSupabase(
-  admin: SupabaseClient,
+  admin: Pick<SupabaseClient, "from">,
   input: { organizationId: string; conversationId: string; agora: Date; ttlMs: number },
 ): Promise<DecisaoDeElegibilidade | null> {
   const { data, error } = await admin

@@ -23,7 +23,7 @@ import type { ServiceBoundary } from "@/lib/atendimento/fronteira";
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { EventRow, HandlerResult } from "@/lib/event-log/dispatcher";
-import { evaluateConditions, type RuleCondition } from "@/lib/automation/conditions";
+import { evaluateConditions, type Conditions } from "@/lib/automation/conditions";
 import { getAction } from "@/lib/automation/actions";
 import type { ActionResultDetail } from "@/lib/automation/types";
 import { audit } from "@/lib/audit";
@@ -59,7 +59,7 @@ function entidadeDoEvento(row: Pick<EventRow, "event_type" | "entity_kind">): st
 interface RuleRow {
   id: string;
   name: string;
-  conditions: RuleCondition[];
+  conditions: Conditions;
   actions: Array<{ type: string; config?: Record<string, unknown> }>;
   trigger_config?: Record<string, unknown> | null;
 }
@@ -126,6 +126,31 @@ export async function buildContext(admin: SupabaseClient, row: EventRow): Promis
           .select("*")
           .eq("id", appointment.contact_id)
           .eq("organization_id", org)
+          .maybeSingle();
+        if (contact) context.contact = contact;
+      }
+    }
+  } else if (row.entity_kind === "social_comment" && row.entity_id) {
+    // O comentário é a linha de AGORA (a resposta privada pode já ter saído por
+    // outra regra). O contato só existe quando a pessoa já conversou com a
+    // conta: a ligação é a identidade social, sem FK — quem comenta pode nunca
+    // ter mandado DM.
+    const { data: comment } = await admin
+      .from("social_comments")
+      .select("*")
+      .eq("id", row.entity_id)
+      .eq("organization_id", org)
+      .maybeSingle();
+    if (comment) {
+      context.comment = comment;
+      const identidade = (comment as { author_identity?: string | null }).author_identity;
+      if (identidade) {
+        const { data: contact } = await admin
+          .from("contacts")
+          .select("*")
+          .eq("organization_id", org)
+          .eq("social_identity", identidade)
+          .is("is_merged_into", null)
           .maybeSingle();
         if (contact) context.contact = contact;
       }

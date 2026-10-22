@@ -20,7 +20,11 @@ import { CHANNEL_PROVIDER_SOCIAL } from "./capabilities";
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { CHANNEL_PROVIDER_DATAFY, CHANNEL_PROVIDER_ZERNIO } from "./capabilities";
+import {
+  CHANNEL_PROVIDER_DATAFY,
+  CHANNEL_PROVIDER_META_SOCIAL,
+  CHANNEL_PROVIDER_ZERNIO,
+} from "./capabilities";
 import { canalGraphParceiroLigado } from "./graph-parceiro/credentials";
 import { graphPartnerRefsDaSessao } from "./graph-parceiro/session";
 import {
@@ -30,6 +34,8 @@ import {
 } from "./graph-parceiro/webhook";
 import { sincronizarSaudeDaConexao } from "./health";
 import { lerEnvelopeMeta } from "./meta/envelope";
+import { corpoEhDaContaDaSessao, ingerirWebhookInstagram } from "./meta-social/ingest";
+import { respostaDoHandshake, verificarAssinaturaInstagram } from "./meta-social/webhook";
 import { ingestMetaAppContactSync, ingestMetaEcho, ingestMetaInbound } from "./meta/ingest";
 import { parseMetaWebhook } from "./meta/webhook";
 import { samePhone } from "./phone-variants";
@@ -86,7 +92,29 @@ export function acceptsInboundWebhook(provider: string): boolean {
   // O canal Datafy é opcional da instalação: desligado, a entrada dele não
   // existe — nem para quem tem o token de uma sessão gravada antes.
   if (provider === CHANNEL_PROVIDER_DATAFY) return canalGraphParceiroLigado();
-  return provider === CHANNEL_PROVIDER_ZERNIO || provider === CHANNEL_PROVIDER_SOCIAL;
+  return (
+    provider === CHANNEL_PROVIDER_ZERNIO ||
+    provider === CHANNEL_PROVIDER_SOCIAL ||
+    provider === CHANNEL_PROVIDER_META_SOCIAL
+  );
+}
+
+/**
+ * O handshake de verificação (GET) — só para quem o provedor exige.
+ *
+ * A Meta, antes de aceitar uma URL de webhook, faz um GET com `hub.mode`,
+ * `hub.verify_token` e `hub.challenge`, e só segue se a resposta for o
+ * `challenge` cru. Os outros canais desta rota não fazem handshake. `null` =
+ * recusar (a rota responde 403), e isso inclui "este canal não tem handshake".
+ */
+export function respostaDoHandshakeDeEntrada(
+  provider: string,
+  params: URLSearchParams,
+  secret: string | null,
+  channelSessionId: string,
+): string | null {
+  if (provider !== CHANNEL_PROVIDER_META_SOCIAL) return null;
+  return respostaDoHandshake(params, secret, channelSessionId);
 }
 
 /** Authenticate before archiving raw payloads. The handler repeats this guard for non-HTTP callers. */
@@ -96,6 +124,8 @@ export function verifyInboundWebhookSignature(provider: string, raw: string, hea
   if (provider === CHANNEL_PROVIDER_DATAFY) {
     return verifyGraphPartnerSignature(raw, headers.get(HEADER_ASSINATURA), headers.get(HEADER_TIMESTAMP), secret);
   }
+  // O segredo é o do APP Meta da organização, gravado na sessão.
+  if (provider === CHANNEL_PROVIDER_META_SOCIAL) return verificarAssinaturaInstagram(raw, headers, secret);
   return verifyZernioSignature(raw, headers.get("x-zernio-signature"), secret);
 }
 
@@ -132,6 +162,11 @@ export function verifyInboundWebhookSignature(provider: string, raw: string, hea
 export async function inboundPayloadBelongsToSession(admin: SupabaseClient, input: InboundWebhookInput): Promise<boolean> {
   if (input.session.provider === CHANNEL_PROVIDER_SOCIAL) {
     return socialPayloadBelongsToSession(admin, input.session.organization_id, input.session.id, input.rawBody);
+  }
+  // Um app Meta entrega numa URL só os eventos de TODAS as contas ligadas a ele:
+  // a conta do corpo tem de ser a desta sessão.
+  if (input.session.provider === CHANNEL_PROVIDER_META_SOCIAL) {
+    return corpoEhDaContaDaSessao(admin, input.session.organization_id, input.session.id, input.rawBody);
   }
   if (input.session.provider === CHANNEL_PROVIDER_ZERNIO) {
     const { evento, conta: contaDoEvento } = cabecalhoDoEventoZernio(input.rawBody);
@@ -194,6 +229,8 @@ export async function handleInboundWebhook(
       return zernioInbound(admin, input);
     case CHANNEL_PROVIDER_DATAFY:
       return datafyInbound(admin, input);
+    case CHANNEL_PROVIDER_META_SOCIAL:
+      return instagramInbound(admin, input);
     default:
       // Token de um canal que não entra por aqui. É configuração trocada, não
       // ataque — mas processar seria ler o payload com o parser errado.
@@ -454,4 +491,23 @@ async function datafyInbound(
   }
 
   return { ok: true, body: { received: eventos.length, outcomes: desfechos } };
+}
+
+/**
+ * Entrada do Instagram nativo. Fail-closed: a assinatura é conferida de novo
+ * aqui porque esta função também é chamada fora da rota (reprocessamento do
+ * arquivo do webhook), e sem o segredo do app nada entra.
+ */
+async function instagramInbound(
+  admin: SupabaseClient,
+  input: InboundWebhookInput,
+): Promise<InboundWebhookOutcome> {
+  if (!verifyInboundWebhookSignature(input.session.provider, input.rawBody, input.headers, input.secret)) {
+    return { ok: false, code: "unauthorized", message: "bad_signature" };
+  }
+  return ingerirWebhookInstagram(admin, {
+    organizationId: input.session.organization_id,
+    channelSessionId: input.session.id,
+    rawBody: input.rawBody,
+  });
 }

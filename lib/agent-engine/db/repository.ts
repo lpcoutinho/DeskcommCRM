@@ -126,6 +126,8 @@ export type InboxKind =
   // dois dispara pela MESMA lista (`lib/tarefas/preferencia-de-lembrete.ts`).
   | 'task_due'
   | 'task_overdue'
+  // Um post agendado do módulo de publicações não saiu (migration 0741).
+  | 'publicacao_falhou'
   | 'other';
 
 export interface InboxItemRow {

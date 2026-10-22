@@ -37,12 +37,73 @@ import {
   abrirArquivoDoWebhook,
   fecharArquivoDoWebhook,
 } from "@/lib/channels/arquivo-de-webhook";
-import { acceptsInboundWebhook, handleInboundWebhook, verifyInboundWebhookSignature, inboundPayloadBelongsToSession } from "@/lib/channels/inbound";
+import {
+  acceptsInboundWebhook,
+  handleInboundWebhook,
+  inboundPayloadBelongsToSession,
+  respostaDoHandshakeDeEntrada,
+  verifyInboundWebhookSignature,
+} from "@/lib/channels/inbound";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { decryptWebhookSecret } from "@/lib/webhooks/secrets";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+
+/**
+ * GET — o handshake de verificação que alguns provedores fazem antes de aceitar
+ * a URL (a Meta manda `hub.challenge` e espera recebê-lo de volta, cru). Quem
+ * responde é o seam: a rota não sabe quem faz handshake nem como se confere.
+ *
+ * Toda recusa é 403 e igual — token desconhecido, canal arquivado, canal sem
+ * handshake ou token de verificação errado —: quem varre URLs não aprende nada
+ * com a diferença, e a Meta só precisa saber que não foi aceito.
+ */
+export async function GET(
+  req: NextRequest,
+  ctx: { params: Promise<{ token: string }> },
+): Promise<Response> {
+  const { token } = await ctx.params;
+  const recusa = () => new Response("forbidden", { status: 403 });
+  if (!token || token.length < 8) return recusa();
+
+  const admin = createAdminClient();
+  const { data } = await queryTolerantToMissingArchived(
+    () =>
+      admin
+        .from("channel_sessions")
+        .select(`id, organization_id, provider, webhook_secret_encrypted, ${ARCHIVED_AT}`)
+        .eq("webhook_path_token", token)
+        .maybeSingle(),
+    () =>
+      admin
+        .from("channel_sessions")
+        .select("id, organization_id, provider, webhook_secret_encrypted")
+        .eq("webhook_path_token", token)
+        .maybeSingle(),
+  );
+  // A organização vem da linha que o TOKEN do caminho resolveu — a fonte
+  // confiável, como no POST. Nada do pedido escolhe a sessão.
+  const sessao = data as {
+    id: string;
+    organization_id: string;
+    provider: string;
+    webhook_secret_encrypted: unknown;
+    archived_at?: string | null;
+  } | null;
+  if (!sessao || sessao.archived_at || !acceptsInboundWebhook(sessao.provider)) return recusa();
+
+  const cifrado = sessao.webhook_secret_encrypted;
+  const secret = cifrado ? await decryptWebhookSecret(admin, cifrado as string) : null;
+  const desafio = respostaDoHandshakeDeEntrada(
+    sessao.provider,
+    req.nextUrl.searchParams,
+    secret,
+    sessao.id,
+  );
+  if (desafio === null) return recusa();
+  return new Response(desafio, { status: 200, headers: { "Content-Type": "text/plain" } });
+}
 
 export async function POST(
   req: NextRequest,

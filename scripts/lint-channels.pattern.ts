@@ -47,7 +47,8 @@
  * por rota, componente e cópia de tela. Provider novo = uma linha aqui, no
  * mesmo commit.
  */
-const SEPARADO = /(?<![a-zA-Z0-9])(waha|meta_cloud|zernio|datafy|graph\.facebook\.com)(?![a-zA-Z0-9])/i;
+const SEPARADO =
+  /(?<![a-zA-Z0-9])(waha|meta_cloud|meta_social|zernio|datafy|graph\.facebook\.com|graph\.instagram\.com)(?![a-zA-Z0-9])/i;
 
 /**
  * Grafia PascalCase dentro de identificador: `WahaClient`,
@@ -57,7 +58,7 @@ const SEPARADO = /(?<![a-zA-Z0-9])(waha|meta_cloud|zernio|datafy|graph\.facebook
  * segmento. Não seguido de minúscula/dígito exclui `Wahalla` — onde `Waha` é
  * começo de outra palavra, não segmento próprio.
  */
-const PASCAL = /(Waha|Zernio|Datafy)(?![a-z0-9])/;
+const PASCAL = /(Waha|Zernio|Datafy|MetaSocial)(?![a-z0-9])/;
 
 /** Um trecho de código/prosa nomeia um provider de canal? */
 export function nomeiaProvider(texto: string): boolean {

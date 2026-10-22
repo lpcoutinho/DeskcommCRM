@@ -12,6 +12,7 @@
  * A lógica de decisão (manual/round_robin/no-eligible/replay) é pura em
  * lib/routing/decide.ts; aqui só há I/O.
  */
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logger } from "@/lib/logger";
@@ -365,8 +366,8 @@ function strOrNull(v: unknown): string | null {
  * instalação existente: as duas colunas nasceram nulas. Devolver `null` (e não
  * um objeto default) é o que faz o worker cair no comportamento da organização.
  */
-async function carregarRegraDoNumero(
-  admin: ReturnType<typeof createAdminClient>,
+export async function carregarRegraDoNumero(
+  admin: Pick<SupabaseClient, "from">,
   orgId: string,
   channelSessionId: string | null,
 ): Promise<RegraDoNumero | null> {

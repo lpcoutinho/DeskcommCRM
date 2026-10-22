@@ -35,6 +35,15 @@ export const CATALOGO_DE_MODULOS: readonly ModuloCatalogo[] = [
       "continua no sistema mesmo sem este módulo. Toda instalação anterior a esta versão " +
       "continua com Comandas ligada.",
   },
+  {
+    // Módulo de tabela (ADR-0002): a tabela `publicacoes_posts` e o bucket
+    // `publicacoes` nascem SÓ onde ele é instalado (`fn_publicacoes_provisionar`).
+    slug: "publicacoes",
+    nome: "Publicações nas redes",
+    descricao:
+      "Agendar e publicar posts (imagem, vídeo, carrossel, reels e stories) nas contas de " +
+      "Instagram conectadas, com a fila e o histórico do que saiu e do que falhou.",
+  },
 ];
 
 export function moduloDoCatalogo(slug: string): ModuloCatalogo | undefined {

@@ -1,4 +1,5 @@
 import type { Role } from "@/lib/auth/types";
+import { PAPEL_MINIMO_DA_CENTRAL } from "@/lib/ai/inbox-destino";
 import type { ModuloOpcional } from "@/lib/instalacao/modulos";
 import type { CapacidadeDaOrganizacao } from "@/lib/organizacao/capacidades";
 
@@ -185,6 +186,17 @@ export const NAV_CATALOG = [
     sidebar: true,
   },
   {
+    // Comentários das publicações das contas sociais conectadas (Instagram
+    // nativo). Atendimento, e não CRM: é a porta por onde a pessoa chega antes
+    // de mandar DM. Sem `sidebar`: só quem conecta rede social precisa dela no
+    // dia a dia, e a barra lateral é de todos.
+    href: "/app/comentarios",
+    label: "Comentários",
+    description: "O que comentam nas publicações do Instagram e do Facebook, e a resposta em público ou no privado.",
+    icon: "ChatCircle",
+    group: "atendimento",
+  },
+  {
     // Entra em "atendimento", e não em "organizacao", porque a Agenda é onde o
     // dia acontece e não onde ele se configura: quem atende abre isto de manhã
     // junto com o Inbox. Os TIPOS de agendamento — que são configuração de
@@ -343,6 +355,19 @@ export const NAV_CATALOG = [
     group: "crm",
     section: "O dia a dia da venda",
     minRole: "manager",
+  },
+  {
+    // Módulo opcional (ADR-0002), fonte `modulos_instalados` — a porta só existe
+    // depois que o administrador da instalação instala `publicacoes` em
+    // `/admin/modulos`. Mesmo mecanismo da porta de honorários.
+    href: "/app/publicacoes",
+    label: "Publicações",
+    description: "Agende e publique posts no Instagram conectado, e veja o que saiu e o que falhou.",
+    icon: "CalendarBlank",
+    group: "crm",
+    section: "Preparar a venda",
+    minRole: "viewer",
+    modulo: "publicacoes",
   },
   {
     // ⚠️ Esta tela nasceu porque a FERRAMENTA já existia sem ela. O agente de IA
@@ -650,6 +675,26 @@ export const NAV_CATALOG = [
     icon: "Flag",
     group: "ia",
     section: "Acompanhar o agente",
+    // ⚠️ ESTA ENTRADA NÃO TINHA PISO, E POR ISSO OFERECIA UMA PORTA FECHADA.
+    //
+    // Ela não decide só o item do menu: é DELA que
+    // `components/shell/AlertsBell.tsx` e `AvisoDePropostaEmDestaque.tsx` leem
+    // para se mostrar — os dois perguntam se `/app/ai/inbox` está entre os
+    // destinos da interface. Sem `minRole`, a resposta era "sim" para o
+    // `viewer`, e o sino aparecia para quem não alcança a Central. O contador,
+    // então, ficava em ZERO PARA SEMPRE: `useAgentInbox` só consulta quando o
+    // papel alcança a tela (`ai.inbox.view` = `agent`, em
+    // `hooks/auth/AuthProvider.tsx`), e as rotas de `/api/v1/ai/inbox` exigem
+    // `PAPEL_MINIMO_DA_CENTRAL` — recusam o `viewer`. Nada quebrava e nada
+    // avisava: a pessoa via um sino que nunca ia contar nada.
+    //
+    // A régua é a CONSTANTE, nunca o literal "agent": ela é o mesmo piso que
+    // `requireRole(PAPEL_MINIMO_DA_CENTRAL, …)` aplica nas três rotas da
+    // Central e o mesmo que `lib/notifications/push-dos-avisos.ts` usa para o
+    // push. Com o literal aqui, subir (ou descer) o piso da Central reabriria a
+    // porta em silêncio, para todo mundo, sem nenhum teste ficando vermelho.
+    // Quem guarda isso é `components/shell/sino-so-para-quem-alcanca-a-central.test.tsx`.
+    minRole: PAPEL_MINIMO_DA_CENTRAL,
   },
   {
     // "Aviso no WhatsApp", NUNCA "Avisos": a vizinha de cima chama-se "Alertas"
@@ -887,6 +932,14 @@ export const NAV_CATALOG = [
     label: "Notificações",
     description: "Por onde e sobre o quê você quer ser avisado.",
     icon: "Bell",
+    group: "organizacao",
+    section: "Sua conta",
+  },
+  {
+    href: "/app/settings/aplicativo",
+    label: "App no celular",
+    description: "Instale o sistema na tela de início do celular e receba os avisos.",
+    icon: "DeviceMobile",
     group: "organizacao",
     section: "Sua conta",
   },

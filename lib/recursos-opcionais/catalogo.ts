@@ -125,6 +125,10 @@ const TEXTO_DO_MODULO: Record<ModuloOpcional, { nome: string; oQueFaz: string }>
     nome: "Comandas",
     oQueFaz: "A comanda do atendimento: itens, forma de pagamento, comissões e fidelidade.",
   },
+  publicacoes: {
+    nome: "Publicações nas redes",
+    oQueFaz: "Agendar e publicar posts no Instagram conectado, com a fila do que saiu e do que falhou.",
+  },
   cobranca: {
     nome: "Cobrança dos seus clientes",
     oQueFaz: "Você cria planos e cobra as empresas desta instalação, com teste grátis e suspensão de quem não paga.",
@@ -330,10 +334,10 @@ const DO_SERVIDOR: RecursoOpcional[] = [
     nome: "Notificação com a aba fechada",
     oQueFaz: "Os alertas chegam na bandeja do computador mesmo com o sistema fechado.",
     nivel: "servidor",
-    padrao: "desligado",
+    padrao: "ligado",
     quemDecide: "dono_do_servidor",
     href: null,
-    comoLigar: "No arquivo de ambiente, o par VAPID_PUBLIC_KEY e VAPID_PRIVATE_KEY.",
+    comoLigar: "Nasce pronto pelo kit de instalação, mas só funciona em endereço com https (em http://IP nenhum navegador entrega o aviso com o sistema fechado). Se aparecer desligado, rode no servidor: bash hostgator-setup-kit/update.sh",
     ler: peloServidor("web_push"),
   },
   {

@@ -20,7 +20,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Plus, Trash, CaretUp, CaretDown } from "@/lib/ui/icons";
-import { acoesQueFechamLaco, createAutomationRuleSchema, TRIGGER_EVENTS } from "@/lib/schemas/webhooks";
+import {
+  ACOES_NO_GATILHO_DE_COMENTARIO,
+  acoesDeComentarioForaDoGatilho,
+  acoesQueFechamLaco,
+  createAutomationRuleSchema,
+  GATILHO_DE_COMENTARIO,
+  TRIGGER_EVENTS,
+} from "@/lib/schemas/webhooks";
 import {
   DIAS_MAX,
   DIAS_MIN,
@@ -36,6 +43,12 @@ import {
   type DirecaoDoSilencio,
 } from "@/lib/automation/gatilhos-de-tempo";
 import { configAoSalvarDaTela } from "@/lib/automation/config-ao-salvar";
+import {
+  OPERADORES_SEM_VALOR,
+  type ConditionNode,
+  type ConditionOp,
+  type Conditions,
+} from "@/lib/automation/conditions";
 import { camposDeDataDoNegocio } from "@/lib/leads/campos-do-funil";
 import {
   useCreateAutomationRule,
@@ -53,13 +66,22 @@ interface Props {
   rule: AutomationRuleRow | null;
 }
 
-export type Op = "eq" | "neq" | "contains";
+export type Op = ConditionOp;
 
 interface ConditionRow {
   field: string;
   op: Op;
   value: string;
 }
+
+/**
+ * Como o grupo do TOPO combina as condições (#2727). O motor guarda a lista
+ * simples ou um grupo `{all:…}`/`{any:…}` do TOPO (a porta recusa aninhamento;
+ * ver `conditionGroupSchema`); a tela expõe esse grupo e serializa
+ * `todas` como a lista simples (o formato antigo, ≡ `all`) e `qualquer` como
+ * `{any:[…]}`. Grupos ANINHADOS são do modelo/avaliador, não desta tela.
+ */
+type ModoDoGrupo = "todas" | "qualquer";
 
 export interface CuratedField {
   value: string;
@@ -179,9 +201,40 @@ export const CURATED_FIELDS: Record<TriggerEvent, CuratedField[]> = {
   // funil (via etapa/tags) e tags do contato.
   "lead.silent_for": LEAD_FIELDS,
   "lead.stage_stale": [...LEAD_FIELDS, STAGE_FIELD],
+  // O caso do n8n que motivou o gatilho: "comentou EU QUERO → DM com o link".
+  // O texto é o filtro principal; a publicação filtra a campanha de um post só.
+  "comment.received": [
+    { value: "comment.body", label: "Texto do comentário", op: "contains" },
+    { value: "comment.media_external_id", label: "Id da publicação", op: "eq" },
+    { value: "comment.author_username", label: "@ de quem comentou", op: "eq" },
+  ],
 };
 
-export const OP_LABELS: Record<Op, string> = { eq: "é", neq: "não é", contains: "contém" };
+export const OP_LABELS: Record<Op, string> = {
+  eq: "é",
+  neq: "não é",
+  contains: "contém",
+  not_contains: "não contém",
+  is_empty: "está vazio",
+  is_not_empty: "está preenchido",
+  gt: "maior que",
+  gte: "maior ou igual a",
+  lt: "menor que",
+  lte: "menor ou igual a",
+};
+
+/**
+ * Operadores que NÃO pedem valor: "está vazio" e "está preenchido" perguntam
+ * pelo campo, não por um texto. A lista é a MESMA do desenho e do avaliador
+ * (`OPERADORES_SEM_VALOR`, #2727) — enquanto cada tela tinha a sua cópia, o
+ * desenho descartava a condição `is_empty` no save e a regra ia vazia.
+ */
+const OPS_SEM_VALOR = OPERADORES_SEM_VALOR;
+
+/** Um nó de linha é uma condição de campo (tem `field`), não um grupo. */
+function ehLinha(no: ConditionNode): no is { field: string; op: Op; value: string } {
+  return typeof no === "object" && no !== null && "field" in no;
+}
 
 function emptyCondition(): ConditionRow {
   return { field: "", op: "eq", value: "" };
@@ -239,6 +292,7 @@ export function RuleEditor({ open, onOpenChange, rule }: Props) {
   const [name, setName] = React.useState("");
   const [triggerEvent, setTriggerEvent] = React.useState<TriggerEvent | "">("");
   const [conditions, setConditions] = React.useState<ConditionRow[]>([]);
+  const [modoDasCondicoes, setModoDasCondicoes] = React.useState<ModoDoGrupo>("todas");
   const [advancedRows, setAdvancedRows] = React.useState<Record<number, boolean>>({});
   const [actions, setActions] = React.useState<ActionItem[]>([]);
   const [configDaData, setConfigDaData] = React.useState<ConfigDaData>({
@@ -275,8 +329,16 @@ export function RuleEditor({ open, onOpenChange, rule }: Props) {
     if (!open) return;
     setName(rule?.name ?? "");
     setTriggerEvent((rule?.trigger_event as TriggerEvent) ?? "");
+    // O guardado é a lista simples (formato antigo, ≡ "todas") ou um grupo
+    // `{all|any}` (§#2727). A tela lê o grupo do TOPO; um grupo aninhado dentro
+    // dele é do modelo, não desta tela, e não é desenhado aqui.
+    const guardadas: Conditions = rule?.conditions ?? [];
+    const listaDoTopo = Array.isArray(guardadas) ? guardadas : (guardadas.any ?? guardadas.all ?? []);
+    setModoDasCondicoes(!Array.isArray(guardadas) && Array.isArray(guardadas.any) ? "qualquer" : "todas");
     setConditions(
-      rule?.conditions.map((c) => ({ field: c.field, op: c.op, value: c.value })) ?? [],
+      listaDoTopo
+        .filter(ehLinha)
+        .map((c) => ({ field: c.field, op: c.op as Op, value: c.value })),
     );
     setAdvancedRows({});
     setActions((rule?.actions as ActionItem[] | undefined) ?? []);
@@ -356,9 +418,21 @@ export function RuleEditor({ open, onOpenChange, rule }: Props) {
     const payload = {
       name,
       trigger_event: triggerEvent,
-      conditions: conditions
-        .filter((c) => c.field.trim() && c.value.trim())
-        .map((c) => ({ field: c.field.trim(), op: c.op, value: c.value.trim() })),
+      // Serializa o grupo do topo: "todas" ⇒ a lista simples (formato antigo,
+      // compatível) e "qualquer" ⇒ `{any:[…]}`. Operador sem valor não exige o
+      // campo de valor. Regra sem condição nenhuma vai como `[]` nos dois modos.
+      conditions: (() => {
+        const linhas = conditions
+          .filter((c) => c.field.trim() && (OPS_SEM_VALOR.has(c.op) || c.value.trim()))
+          .map((c) => ({
+            field: c.field.trim(),
+            op: c.op,
+            value: OPS_SEM_VALOR.has(c.op) ? "" : c.value.trim(),
+          }));
+        const resultado: Conditions =
+          linhas.length === 0 || modoDasCondicoes === "todas" ? linhas : { any: linhas };
+        return resultado;
+      })(),
       actions,
       // `Number("")` é 0 — o que gravaria "avisar no dia" para quem não
       // digitou nada. O campo vazio vira `NaN`, que o schema recusa com a
@@ -459,6 +533,7 @@ export function RuleEditor({ open, onOpenChange, rule }: Props) {
               onValueChange={(v) => {
                 setTriggerEvent(v as TriggerEvent);
                 setConditions([]);
+                setModoDasCondicoes("todas");
                 setAdvancedRows({});
                 if (v !== "lead.created") setWebhookSourceId(QUALQUER_FONTE);
               }}
@@ -724,6 +799,27 @@ export function RuleEditor({ open, onOpenChange, rule }: Props) {
 
           <section className="space-y-3">
             <h3 className="text-lg font-semibold text-text">{t("SE (opcional)")}</h3>
+            {/* #2727 — o grupo do TOPO: "todas" combina por E (a lista simples,
+                o formato de sempre) e "qualquer uma" grava `{any:[…]}`. */}
+            {conditions.length > 0 ? (
+              <div className="flex flex-wrap items-center gap-2">
+                <Label className="text-sm text-muted-foreground">
+                  {t("Combinar as condições por")}
+                </Label>
+                <Select
+                  value={modoDasCondicoes}
+                  onValueChange={(v) => setModoDasCondicoes(v as ModoDoGrupo)}
+                >
+                  <SelectTrigger className="w-56">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todas">{t("Todas as condições")}</SelectItem>
+                    <SelectItem value="qualquer">{t("Qualquer uma das condições")}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            ) : null}
             {conditions.map((cond, idx) => {
               // Linha nova (campo vazio) começa no modo curado — o avançado é
               // escape p/ quem sabe o path; só cai nele sozinho ao EDITAR uma
@@ -766,7 +862,7 @@ export function RuleEditor({ open, onOpenChange, rule }: Props) {
                       value={cond.op}
                       onValueChange={(v) => updateCondition(idx, { op: v as Op })}
                     >
-                      <SelectTrigger className="w-28">
+                      <SelectTrigger className="w-40">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -781,7 +877,7 @@ export function RuleEditor({ open, onOpenChange, rule }: Props) {
                         ))}
                       </SelectContent>
                     </Select>
-                    {curated?.kind === "stage" ? (
+                    {OPS_SEM_VALOR.has(cond.op) ? null : curated?.kind === "stage" ? (
                       <Select
                         value={cond.value}
                         onValueChange={(v) => updateCondition(idx, { value: v })}
@@ -896,6 +992,13 @@ export function RuleEditor({ open, onOpenChange, rule }: Props) {
                     as ações que regravam o lead: fechariam laço (#1528). */}
                 {(Object.keys(ACTION_LABELS) as ActionType[])
                   .filter((actionType) => !acoesQueFechamLaco(triggerEvent, [{ type: actionType }]).length)
+                  // Responder comentário só no gatilho de comentário; e nele, só o
+                  // que não depende de negócio nem de telefone.
+                  .filter((actionType) =>
+                    triggerEvent === GATILHO_DE_COMENTARIO
+                      ? (ACOES_NO_GATILHO_DE_COMENTARIO as readonly string[]).includes(actionType)
+                      : !acoesDeComentarioForaDoGatilho(triggerEvent, [{ type: actionType }]).length,
+                  )
                   .map((actionType) => (
                     <SelectItem key={actionType} value={actionType}>
                       {t(ACTION_LABELS[actionType])}

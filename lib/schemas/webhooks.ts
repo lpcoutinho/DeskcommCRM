@@ -9,6 +9,7 @@
 import { z } from "zod";
 import { webhookFormFieldsSchema } from "@/lib/webhooks/formulario";
 
+import { conditionsSchema } from "@/lib/automation/conditions";
 import {
   GATILHO_DE_DATA_DO_FUNIL,
   configDoGatilhoDeData,
@@ -100,6 +101,11 @@ export const ENTIDADE_ESPERADA_POR_GATILHO = {
   // regras do mesmo gatilho com N diferentes disparariam juntas.
   "lead.silent_for": "crm_lead",
   "lead.stage_stale": "crm_lead",
+  // Comentário numa publicação de rede social conectada (Instagram nativo).
+  // Nasce do gatilho do banco no INSERT de `social_comments` (migration 0742),
+  // reservado ao servidor no `emit_event`; a entidade é o próprio comentário,
+  // que o `buildContext` hidrata como `comment`.
+  "comment.received": "social_comment",
 } as const;
 
 export type GatilhoDeAutomacao = keyof typeof ENTIDADE_ESPERADA_POR_GATILHO;
@@ -211,16 +217,52 @@ function recusarLacoDeLead(
   ctx.addIssue({ code: "custom", path: ["actions"], message: MENSAGEM_DO_LACO_DE_LEAD });
 }
 
+/** O gatilho de comentário — o único em que as ações de comentário fazem sentido. */
+export const GATILHO_DE_COMENTARIO = "comment.received" as const;
+
+/** As ações que respondem o comentário do evento: precisam de um comentário no contexto. */
+export const ACOES_DE_COMENTARIO = ["reply_comment", "private_reply_comment"] as const;
+
+/**
+ * O que a TELA oferece no gatilho de comentário: as respostas e o aviso a outro
+ * sistema. As demais ações pedem negócio ou telefone, que o comentário não tem
+ * (a API não recusa: a ação sem alvo termina `skipped` e diz o motivo).
+ */
+export const ACOES_NO_GATILHO_DE_COMENTARIO = [...ACOES_DE_COMENTARIO, "call_webhook"] as const;
+
+export const MENSAGEM_DA_ACAO_DE_COMENTARIO =
+  "Responder comentário só funciona no gatilho \"Quando alguém comentar numa publicação\".";
+
+/** As ações de comentário de uma regra cujo gatilho NÃO é comentário (vazio = regra coerente). */
+export function acoesDeComentarioForaDoGatilho(
+  triggerEvent: string | undefined,
+  actions: readonly { type: string; config?: Record<string, unknown> }[] | undefined,
+): string[] {
+  if (!triggerEvent || triggerEvent === GATILHO_DE_COMENTARIO) return [];
+  return tiposDeAcao(actions).filter((t) => (ACOES_DE_COMENTARIO as readonly string[]).includes(t));
+}
+
+function recusarAcaoDeComentarioForaDoGatilho(
+  regra: { trigger_event?: string; actions?: readonly { type: string; config?: Record<string, unknown> }[] },
+  ctx: z.RefinementCtx,
+): void {
+  if (!acoesDeComentarioForaDoGatilho(regra.trigger_event, regra.actions).length) return;
+  ctx.addIssue({ code: "custom", path: ["actions"], message: MENSAGEM_DA_ACAO_DE_COMENTARIO });
+}
+
 export const TRIGGER_EVENTS = Object.keys(ENTIDADE_ESPERADA_POR_GATILHO) as [
   GatilhoDeAutomacao,
   ...GatilhoDeAutomacao[],
 ];
 
-export const conditionSchema = z.object({
-  field: z.string().min(1).max(200),
-  op: z.enum(["eq", "neq", "contains"]),
-  value: z.string().max(500),
-});
+/**
+ * As condições de uma regra (#2727): o schema e o avaliador vivem juntos em
+ * `lib/automation/conditions.ts`, para a tela, a porta da API e o motor lerem a
+ * MESMA definição. Aqui só se reexporta — `conditionsSchema` aceita a lista
+ * antiga (≡ `all`) e o grupo `{all|any}` do topo (o aninhamento é recusado na
+ * porta; ver `conditionGroupSchema`).
+ */
+export { conditionSchema } from "@/lib/automation/conditions";
 
 /**
  * O `config` de `assign_owner` (#2041): uma pessoa fixa, a forma de sempre, ou
@@ -329,13 +371,20 @@ const acoesFixas = [
   // #2726 — o e-mail como SAÍDA. O transporte não é configuração da regra: ele
   // já existe em `lib/email` (SMTP ou Resend, escolhido em Admin › E-mail), e
   // esta ação só diz QUEM recebe, o ASSUNTO e o CORPO. `destinatario` é o modo
-  // (contato / responsável / endereço fixo) e `email_fixo` só existe para o
-  // terceiro — por isso é opcional: exigir endereço num envio ao contato
-  // recusaria na porta a regra que não precisa dele.
+  // (contato / responsável / pessoa da equipe / endereço fixo) e `email_fixo`
+  // só existe para o último — por isso é opcional: exigir endereço num envio ao
+  // contato recusaria na porta a regra que não precisa dele.
+  //
+  // #2642 (recorte do PR #2834) — o modo `membro_da_equipe` é o e-mail para uma
+  // PESSOA da equipe, que antes morava no `notify_team`. Duas peças vieram
+  // juntas: o vínculo do membro é conferido NO MOMENTO DO ENVIO (membro
+  // removido da organização não recebe — o defeito do #2794) e o modelo ganha a
+  // variável `{{resumo}}` com o resumo automático do negócio. O teto de envios
+  // por organização desta ação vale para tudo isso sem mudar uma linha.
   z.object({
     type: z.literal("send_email"),
     config: z.object({
-      destinatario: z.enum(["contato", "dono_do_lead", "fixo"]),
+      destinatario: z.enum(["contato", "dono_do_lead", "membro_da_equipe", "fixo"]),
       // O editor guarda o campo como "" (input controlado) quando o modo não
       // é `fixo`; "" vira AUSÊNCIA aqui, na porta que o editor e a API
       // dividem, e não um e-mail inválido. Quem EXIGE o endereço é o
@@ -344,8 +393,18 @@ const acoesFixas = [
         (v) => (v === "" ? undefined : v),
         z.string().email("E-mail inválido").max(320).optional(),
       ),
+      // Mesma tolerância de `email_fixo`: o editor deixa o campo em "" quando o
+      // modo não é `membro_da_equipe`. O endereço NÃO mora aqui — só o vínculo;
+      // o e-mail sai do GoTrue da própria pessoa, no disparo.
+      membro_id: z.preprocess(
+        (v) => (v === "" ? undefined : v),
+        z.string().uuid().optional(),
+      ),
       // Assunto e corpo levam as MESMAS variáveis do WhatsApp: `{{nome}}`,
       // `{{primeiro_nome}}`, `{{lead.*}}` e o campo do funil (`{{destino}}`).
+      // `{{resumo}}` é a variável desta ação (#2642): o resumo do negócio
+      // montado no disparo, com a pontuação, o motivo e o que a passagem
+      // combinou. Só é resolvida quando o modelo a referencia.
       assunto: z.string().min(1).max(200),
       corpo: z.string().min(1).max(5000),
       // Texto simples (padrão) ou HTML simples — negrito, links e quebras.
@@ -358,6 +417,15 @@ const acoesFixas = [
           code: "custom",
           path: ["email_fixo"],
           message: "Informe o endereço de e-mail que recebe os envios desta regra.",
+        });
+      }
+      // Mesma régua do endereço fixo: sem a pessoa escolhida, a regra salvaria
+      // e só falharia no disparo (`sem_membro` em send-email.ts).
+      if (config.destinatario === "membro_da_equipe" && !config.membro_id) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["membro_id"],
+          message: "Escolha a pessoa da equipe que recebe os envios desta regra.",
         });
       }
     }),
@@ -448,6 +516,46 @@ const acoesFixas = [
     type: z.literal("apply_task_plan"),
     config: z.object({
       plano_id: z.string().trim().min(1).max(64),
+    }),
+  }),
+  // Responder o comentário do evento, EM PÚBLICO, embaixo dele. O texto leva
+  // as variáveis do comentário (`{{comment.author_username}}`). Teto da Meta
+  // para comentário: 2.200 caracteres.
+  z.object({
+    type: z.literal("reply_comment"),
+    config: z.object({ template: z.string().min(1).max(2200) }),
+  }),
+  // A DM que nasce do comentário ("resposta privada"): UMA por comentário, até
+  // 7 dias depois dele — a ação garante as duas coisas antes de chamar a rede.
+  // A conversa aparece no Inbox, e se a pessoa responder o atendimento segue.
+  z.object({
+    type: z.literal("private_reply_comment"),
+    config: z.object({ template: z.string().min(1).max(1000) }),
+  }),
+  // #2642 — a ação que avisa a EQUIPE na virada para ganho. O recorte do
+  // mantenedor no PR #2834 deixou UM caminho: o WhatsApp para o número que o
+  // ADMIN já registrou em Avisos. Por isso a configuração é só isto — não tem
+  // número, endereço, pessoa nem texto: colar destino aqui seria a mesma porta
+  // de spam que a disciplina da #1347 fechou, e "quem recebe" deixou de ser
+  // escolha (o destino é o da empresa).
+  //
+  // O e-mail para uma pessoa da equipe não mora mais nesta ação: ele é o
+  // destinatário `membro_da_equipe` do `send_email`, com o teto de envios por
+  // organização valendo e a variável `{{resumo}}` disponível no modelo.
+  z.object({
+    type: z.literal("notify_team"),
+    // `strictObject` SÓ aqui, entre as ações: é o único destino que a regra não
+    // pode carregar. As irmãs aceitam campos extras por tolerância a round-trip
+    // do editor; esta ação não tem o que tolerar — qualquer `telefone`/`email`
+    // colado na regra é a porta de spam que a disciplina da #1347 fechou, e o
+    // destinatário é sempre o que o ADMIN registrou (ver notify-team.ts).
+    //
+    // `canal` é `literal` e não `enum` de propósito: `z.enum(["whatsapp",
+    // "email"])` era o ramo de e-mail que o recorte tirou, e o literal faz a
+    // regra que ainda peça e-mail morrer aqui, na porta, em vez de sair pelo
+    // WhatsApp como se o pedido tivesse sido respeitado.
+    config: z.strictObject({
+      canal: z.literal("whatsapp"),
     }),
   }),
 ] as const;
@@ -551,7 +659,7 @@ export const createAutomationRuleSchema = z
   .object({
     name: z.string().min(1).max(120),
     trigger_event: z.enum(TRIGGER_EVENTS),
-    conditions: z.array(conditionSchema).max(10).default([]),
+    conditions: conditionsSchema.default([]),
     actions: z.array(actionSchema).min(1).max(10).superRefine(umRodizioPorRegra),
     /**
      * O que o gatilho precisa saber além do nome dele (#989).
@@ -566,7 +674,8 @@ export const createAutomationRuleSchema = z
   .superRefine(exigirConfigDoGatilhoDeData)
   .superRefine(exigirConfigDosGatilhosDeTempo)
   .superRefine(exigirIdDaFonteWebhook)
-  .superRefine(recusarLacoDeLead);
+  .superRefine(recusarLacoDeLead)
+  .superRefine(recusarAcaoDeComentarioForaDoGatilho);
 
 function exigirIdDaFonteWebhook(
   regra: { trigger_config?: Record<string, unknown> },
@@ -637,7 +746,7 @@ export const updateAutomationRuleSchema = z
   .object({
     name: z.string().min(1).max(120).optional(),
     trigger_event: z.enum(TRIGGER_EVENTS).optional(),
-    conditions: z.array(conditionSchema).max(10).optional(),
+    conditions: conditionsSchema.optional(),
     actions: z.array(actionSchema).min(1).max(10).superRefine(umRodizioPorRegra).optional(),
     trigger_config: z.record(z.string(), z.unknown()).optional(),
     is_active: z.boolean().optional(),
@@ -663,7 +772,8 @@ export const updateAutomationRuleSchema = z
   .superRefine(exigirIdDaFonteWebhook)
   // Só vê o laço quando o PATCH traz gatilho E ações; o PATCH parcial é
   // conferido contra a regra gravada na rota.
-  .superRefine(recusarLacoDeLead);
+  .superRefine(recusarLacoDeLead)
+  .superRefine(recusarAcaoDeComentarioForaDoGatilho);
 
 export type CreateWebhookSourceInput = z.infer<typeof createWebhookSourceSchema>;
 export type UpdateWebhookSourceInput = z.infer<typeof updateWebhookSourceSchema>;
