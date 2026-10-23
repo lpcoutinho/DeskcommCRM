@@ -28,6 +28,9 @@ interface Comentario {
   private_reply_error: string | null;
 }
 
+/** O comentário com o prazo do privado já medido — na busca, não na renderização. */
+type ComentarioNaTela = Comentario & { prazoVencido: boolean };
+
 type Modo = "publico" | "privado";
 
 function quando(iso: string): string {
@@ -47,7 +50,16 @@ export function Comentarios({ podeResponder, podeAutomatizar }: { podeResponder:
   const [enviando, setEnviando] = useState(false);
   const { data, isLoading } = useQuery({
     queryKey: CHAVE,
-    queryFn: async () => (await apiClient.get<{ data: Comentario[] }>(ROTA)).data,
+    queryFn: async (): Promise<ComentarioNaTela[]> => {
+      const lista = (await apiClient.get<{ data: Comentario[] }>(ROTA)).data;
+      // O relógio é lido aqui: a renderização tem de ser pura, e a lista se
+      // rebusca a cada 30 s, o que basta para um prazo contado em dias.
+      const agora = Date.now();
+      return lista.map((c) => ({
+        ...c,
+        prazoVencido: agora - new Date(c.commented_at).getTime() > PRAZO_DO_PRIVADO_MS,
+      }));
+    },
     // Comentário chega pelo webhook a qualquer hora: a lista se atualiza sozinha.
     refetchInterval: 30_000,
   });
@@ -106,9 +118,8 @@ export function Comentarios({ podeResponder, podeAutomatizar }: { podeResponder:
       ) : (
         <ul className="flex flex-col gap-2">
           {comentarios.map((c) => {
-            const prazoVencido = Date.now() - new Date(c.commented_at).getTime() > PRAZO_DO_PRIVADO_MS;
             const podePublico = podeResponder && !c.public_replied_at;
-            const podePrivado = podeResponder && !c.private_reply_status && !prazoVencido;
+            const podePrivado = podeResponder && !c.private_reply_status && !c.prazoVencido;
             const esteAberto = aberto?.id === c.id;
             return (
               <li key={c.id}>
