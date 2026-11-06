@@ -139,6 +139,7 @@ const EXCECOES: Record<string, string> = {
   commission_rules: "módulo opcional: nasce dentro da provisionadora de vendas",
   commissions: "módulo opcional: nasce dentro da provisionadora de vendas",
   loyalty_ledger: "módulo opcional: nasce dentro da provisionadora de vendas",
+  publicacoes_posts: "módulo opcional: nasce dentro de fn_publicacoes_provisionar()",
 };
 
 /**

@@ -737,4 +737,8 @@ $$;
 revoke all on function public.fn_lgpd_cascade_redact_contact(uuid, uuid, uuid) from public, anon, authenticated;
 grant execute on function public.fn_lgpd_cascade_redact_contact(uuid, uuid, uuid) to service_role;
 
+-- Desde 30/10/2026 a Supabase cria tabela sem privilégio padrão (ver a 9037): o grant é explícito.
+grant select on table public.social_comments to authenticated;
+grant select, insert, update, delete on table public.social_comments to service_role;
+
 notify pgrst, 'reload schema';

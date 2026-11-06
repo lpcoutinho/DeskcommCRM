@@ -69370,6 +69370,8 @@ create policy tenant_isolation_social_comments_all on public.social_comments
   using (organization_id in (select public.fn_user_org_ids()));
 revoke all on table public.social_comments from anon;
 revoke insert, update, delete, truncate on table public.social_comments from authenticated;
+grant select on table public.social_comments to authenticated;
+grant select, insert, update, delete on table public.social_comments to service_role;
 
 comment on table public.social_comments is
   'Comentários recebidos nas publicações das contas sociais conectadas (Instagram nativo). Escrita só pelo servidor; o INSERT emite comment.received para o motor de automação.';
