@@ -18,6 +18,9 @@ export type ActionType =
   | "apply_task_plan"
   | "reply_comment"
   | "private_reply_comment"
+  // #3727 — grava a data do comparecimento num campo de data do negócio; quem
+  // conta os dias é a regra do gatilho de data do funil (#989).
+  | "set_lead_date_field"
   // #2642 — o único destino que não é o lead: a EQUIPE.
   | "notify_team";
 
@@ -91,6 +94,10 @@ export const ACTION_LABELS: Record<ActionType, string> = {
   // As duas respostas a comentário: só aparecem no gatilho de comentário.
   reply_comment: "Responder o comentário em público",
   private_reply_comment: "Responder o comentário no privado (DM)",
+  // #3727 — a ação que não fala com ninguém e não espera: ela GRAVA a data do
+  // atendimento, e quem conta os dias é a regra do gatilho de data do funil.
+  // A frase diz o dado e o destino, que é o que quem monta a regra escolhe.
+  set_lead_date_field: "Gravar a data do atendimento num campo do negócio",
   // #2642 — o único destino que não é o lead. A frase diz "equipe" e não
   // "WhatsApp" porque quem recebe é o WhatsApp cadastrado em Avisos, e quem
   // lê a lista precisa saber que quem recebe é GENTE DA CASA, não o cliente.

@@ -65,6 +65,24 @@ const DIR_MIGRATIONS = path.join(process.cwd(), "supabase", "migrations");
  * dado existente faz o `update.sh` de um clone quebrar no meio.
  */
 const REMOCOES_DELIBERADAS: Record<string, { valores: string[]; porque: string }> = {
+  "20261027170000_9027_assinatura_desconectada_na_central.sql::agent_inbox_items_kind_check": {
+    valores: ["publicacao_falhou"],
+    porque:
+      "NÃO é remoção de propósito: é o encontro do fork com o original, a mesma forma " +
+      "da 0312→0326 abaixo. A 8002 (exclusiva do fork) acrescentou `publicacao_falhou`, e " +
+      "esta migration do original reconstruiu a constraint sem enxergar o valor. A " +
+      "forward-fix é a 8004 (`reconcilia_fork_com_v1_102`), que reafirma a UNIÃO: o estado " +
+      "FINAL da cadeia tem o valor de volta.",
+  },
+  "20261028224500_9033_recuperar_mensagens_da_queda.sql::agent_inbox_items_kind_check": {
+    valores: ["publicacao_falhou"],
+    porque:
+      "NÃO é remoção de propósito: é o encontro do fork com o original, a mesma forma " +
+      "da 0312→0326 abaixo. A 8002 (exclusiva do fork) acrescentou `publicacao_falhou`, e " +
+      "esta migration do original reconstruiu a constraint sem enxergar o valor. A " +
+      "forward-fix é a 8004 (`reconcilia_fork_com_v1_102`), que reafirma a UNIÃO: o estado " +
+      "FINAL da cadeia tem o valor de volta.",
+  },
   "20260918231000_0312_aviso_de_followup_sem_agente.sql::agent_inbox_items_kind_check": {
     valores: ["aviso_de_caso_nao_entregue"],
     porque:
