@@ -100,7 +100,17 @@ update_sh_da() {  # update_sh_da <tag> — caminho de uma cópia do update.sh da
   if ! git -C "$ROOT" rev-parse -q --verify "refs/tags/$1^{commit}" >/dev/null; then
     local profundidade=""
     [ "$(git -C "$ROOT" rev-parse --is-shallow-repository)" = true ] && profundidade="--depth=1"
-    git -C "$ROOT" fetch -q --no-tags $profundidade "$origem_das_tags" "+refs/tags/$1:refs/tags/$1"
+    if ! git -C "$ROOT" fetch -q --no-tags $profundidade "$origem_das_tags" "+refs/tags/$1:refs/tags/$1" 2>/dev/null; then
+      # Fork com release própria responde pela sua, mas não tem as tags do PAI que não
+      # recebeu (a fixa `ANTES_DO_FILTRO` é do original). A tag é buscada lá — nunca
+      # empurrada ao fork, onde todo push de `v*` publica imagem.
+      local pai=""
+      if [ -n "${GH_TOKEN:-}" ] && command -v gh >/dev/null 2>&1; then
+        pai="$(cd "$ROOT" && gh repo view --json parent -q '.parent | select(. != null) | .owner.login + "/" + .name' 2>/dev/null || true)"
+      fi
+      [ -n "$pai" ] || { echo "  ✗ a tag $1 não está em '$origem_das_tags' e não há repositório pai a consultar" >&2; return 1; }
+      git -C "$ROOT" fetch -q --no-tags $profundidade "https://github.com/$pai.git" "+refs/tags/$1:refs/tags/$1"
+    fi
   fi
   git -C "$ROOT" show "$1:hostgator-setup-kit/update.sh" > "$TMP/$1"
   printf '%s' "$TMP/$1"

@@ -634,6 +634,18 @@ assert_exit "$(wc -l < "$n33" | tr -d ' ')" 2 "e absorvida REPETINDO o clone, n�
 if [ -n "$(ls "$d/supabase/migrations/" 2>/dev/null)" ]; then ok "a árvore chega inteira"
 else falha "a árvore chega inteira" "supabase/migrations vazio: seguiu com o clone pela metade"; fi
 
+echo "34. o PR que renumera o arquivo da base libera o número (a sync do fork: 0740 → 8001)"
+# O fork renumerou as próprias migrations para não colidir com o original; o PR que traz o
+# original acrescenta o 0262 dele E tira o 0262 do fork. Depois do merge só um 0262 existe.
+c="$TMP/c34"; clonar "$c"; git -C "$c" switch -q -c sync/original
+git -C "$c" mv supabase/migrations/20260101120000_0262_existente.sql \
+              supabase/migrations/20260101130000_8001_do_fork.sql
+migrar "$c" "20260101110000_0262_do_original.sql"
+commit "$c" "renumera a do fork e traz a do original com o mesmo NNNN"
+saida="$(gate "$c")"; code=$?
+assert_exit "$code" 0 "o número que o PR libera não é colisão"
+assert_not_contains "$saida" "CI REPROVADO" "não acusa o arquivo que sai da árvore"
+
 echo
 if [ "$falhas" = 0 ]; then echo "colisao-de-migration: $casos casos, todos verdes"; exit 0
 else echo "colisao-de-migration: $falhas de $casos casos vermelhos"; exit 1; fi
