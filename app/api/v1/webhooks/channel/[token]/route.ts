@@ -28,11 +28,16 @@
  * 200, e recusar um payload que nunca vai servir faria a reentrega durar para
  * sempre. 500 fica reservado para falha de ESCRITA — aí a reentrega é o que
  * queremos, porque o evento era bom e nós é que não gravamos.
+ *
+ * O evento que o canal processa DEPOIS de responder (`processaDepoisDeResponder`)
+ * troca o 500 por 503: ele responde 200 assim que o arquivo do webhook o
+ * guardou, e o 503 é para quando nem o arquivo gravou — sem ele, o 200 não
+ * teria o que garantir.
  */
 import { randomUUID } from "node:crypto";
 import type { NextRequest } from "next/server";
 
-import { fail, ok } from "@/lib/api/wrappers";
+import { comIdDaRequisicao, fail, ok } from "@/lib/api/wrappers";
 import { ARCHIVED_AT, queryTolerantToMissingArchived } from "@/lib/channels/archived";
 import { acceptsInboundWebhook, respostaDoHandshakeDeEntrada } from "@/lib/channels/inbound";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -57,7 +62,7 @@ export async function GET(
   ctx: { params: Promise<{ token: string }> },
 ): Promise<Response> {
   const { token } = await ctx.params;
-  const recusa = () => new Response("forbidden", { status: 403 });
+  const recusa = () => fail("forbidden", "forbidden", 403);
   if (!token || token.length < 8) return recusa();
 
   const admin = createAdminClient();
@@ -95,7 +100,10 @@ export async function GET(
     sessao.id,
   );
   if (desafio === null) return recusa();
-  return new Response(desafio, { status: 200, headers: { "Content-Type": "text/plain" } });
+  return comIdDaRequisicao(
+    new Response(desafio, { status: 200, headers: { "Content-Type": "text/plain" } }),
+    req,
+  );
 }
 
 export async function POST(

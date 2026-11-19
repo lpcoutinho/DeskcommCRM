@@ -4,6 +4,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 import { RedesSociaisClient } from "./RedesSociaisClient";
+import { CanalBotClient } from "./CanalBotClient";
 import { CanalGraphParceiroClient } from "./CanalGraphParceiroClient";
 import { CanalInstagramClient } from "./CanalInstagramClient";
 import { CanalOficialClient } from "./CanalOficialClient";
@@ -39,10 +40,16 @@ import { rotaDeTemplates } from "@/lib/channels/templates-fonte";
  * apontando a aba certa, e um link colado no chat abre onde deveria. Aba que só
  * existe em `useState` transforma todo link salvo em "abre e procura de novo".
  */
+/** O `?qr=` só vale com o formato de id de canal; qualquer outra coisa é ignorada. */
+export function qrDaUrl(valor: string | null): string | undefined {
+  return valor && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(valor) ? valor : undefined;
+}
+
 export function ConexoesShell({
   wahaConfigured,
   wacallsConfigured,
   graphParceiro = null,
+  bot = null,
 }: {
   wahaConfigured: boolean;
   wacallsConfigured: boolean;
@@ -53,6 +60,11 @@ export function ConexoesShell({
    * O rótulo vem do servidor porque a tela não pode nomear provider.
    */
   graphParceiro?: { label: string } | null;
+  /**
+   * O robô de mensagens (#3486) é MÓDULO OPCIONAL da instalação (`canal_bot`,
+   * doc 216): desligado = `null`, e a aba nem é montada, nem por `?aba=`.
+   */
+  bot?: { label: string } | null;
 }) {
   const t = useT();
   const router = useRouter();
@@ -75,7 +87,9 @@ export function ConexoesShell({
             ? "voz"
             : abaParam === "graph" && graphParceiro
               ? "graph"
-              : "numeros";
+              : abaParam === "bot" && bot
+                ? "bot"
+                : "numeros";
   const sub = params.get("sub") === "templates" ? "templates" : "conexao";
 
   const irPara = (proximaAba: string, proximaSub?: string): void => {
@@ -116,10 +130,22 @@ export function ConexoesShell({
         <TabsTrigger value="facebook">Facebook</TabsTrigger>
         <TabsTrigger value="voz">{t("Chamada de voz")}</TabsTrigger>
         {graphParceiro && <TabsTrigger value="graph">{graphParceiro.label}</TabsTrigger>}
+        {bot && <TabsTrigger value="bot">{bot.label}</TabsTrigger>}
       </TabsList>
 
+      {bot && (
+        <TabsContent value="bot" className="mt-0">
+          <CanalBotClient />
+        </TabsContent>
+      )}
+
       <TabsContent value="numeros" className="mt-0">
-        <ConnectionsClient wahaConfigured={wahaConfigured} />
+        {/* `?qr=<id>` abre o pareamento direto: é o destino da faixa de conexão
+            caída quando o estado é SCAN_QR_CODE — o clique que diz "Escanear o
+            QR" tem que mostrar o QR, não a lista. */}
+        <ConnectionsClient wahaConfigured={wahaConfigured} qrInicial={qrDaUrl(params.get("qr"))}
+          aoFecharQrInicial={() => irPara(aba, sub)}
+        />
       </TabsContent>
 
       <TabsContent value="telefonia" className="mt-0">

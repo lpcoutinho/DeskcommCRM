@@ -1,4 +1,6 @@
-import { NextResponse, type NextRequest } from "next/server";
+import type { NextRequest } from "next/server";
+
+import { fail, ok } from "@/lib/api/wrappers";
 
 import { audit } from "@/lib/audit";
 import { autorizaCron } from "@/lib/auth/cron-auth";
@@ -18,19 +20,13 @@ export const dynamic = "force-dynamic";
 
 async function executar(req: NextRequest) {
   if (!autorizaCron(req))
-    return NextResponse.json(
-      { error: { code: "unauthenticated", message: "cron secret inválido" } },
-      { status: 401 },
-    );
+    return fail("unauthenticated", "cron secret inválido", 401);
 
   let resultados;
   try {
     resultados = await renovarTokensDoInstagram(createAdminClient());
   } catch {
-    return NextResponse.json(
-      { error: { code: "internal_error", message: "Não foi possível ler as contas de Instagram." } },
-      { status: 500 },
-    );
+    return fail("internal_error", "Não foi possível ler as contas de Instagram.", 500);
   }
 
   const porOrganizacao = new Map<string, { renovados: number; falhas: number }>();
@@ -50,9 +46,7 @@ async function executar(req: NextRequest) {
       });
   }
 
-  return NextResponse.json({
-    data: { avaliadas: resultados.length, organizacoes: porOrganizacao.size },
-  });
+  return ok({ avaliadas: resultados.length, organizacoes: porOrganizacao.size });
 }
 
 export const GET = executar;

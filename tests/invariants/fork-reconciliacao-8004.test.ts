@@ -20,6 +20,11 @@ const MIGRATION = readFileSync(
   "utf8",
 );
 
+const SUCESSORA = readFileSync(
+  "supabase/migrations/20261119120000_8005_reconcilia_fork_com_v1_118.sql",
+  "utf8",
+);
+
 const fonteDe = (funcao: string) =>
   sql(`select prosrc from pg_proc where oid = 'public.${funcao}'::regproc;`);
 
@@ -27,6 +32,10 @@ describe("migration 8004 — reconciliação do fork", () => {
   beforeAll(() => {
     sql(MIGRATION);
     sql(MIGRATION);
+    // A 8004 recria as funções na forma da v1.102.0. Na cadeia real a 8005 vem
+    // depois e devolve a forma final; aplicá-la aqui não deixa o banco da suíte
+    // com as versões antigas para os testes seguintes.
+    sql(SUCESSORA);
   });
 
   it("o CHECK de kind aceita o do fork e mantém os do original", () => {
@@ -64,7 +73,9 @@ describe("migration 8004 — reconciliação do fork", () => {
 
   it("social_comments tem grant explícito: authenticated só lê, service_role escreve", () => {
     const pode = (papel: string, comando: string) =>
-      lastLine(sql(`select has_table_privilege('${papel}', 'public.social_comments', '${comando}');`));
+      lastLine(
+        sql(`select has_table_privilege('${papel}', 'public.social_comments', '${comando}');`),
+      );
     expect(pode("authenticated", "SELECT")).toBe("t");
     expect(pode("authenticated", "INSERT")).toBe("f");
     expect(pode("service_role", "INSERT")).toBe("t");

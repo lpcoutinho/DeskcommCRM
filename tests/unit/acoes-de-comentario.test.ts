@@ -93,6 +93,8 @@ describe("o contexto da regra de comentário", () => {
     expect(ctx.comment).toEqual(linhas.social_comments);
     expect(ctx.contact).toEqual(linhas.contacts);
     expect(consultas).toEqual([
+      // Idioma e fuso da organização, pela PK (#4339) — leitura de todo evento.
+      { tabela: "organizations", filtros: { id: "org-1" } },
       { tabela: "social_comments", filtros: { id: "c1", organization_id: "org-1" } },
       { tabela: "contacts", filtros: { organization_id: "org-1", social_identity: "instagram:conta:p1" } },
     ]);

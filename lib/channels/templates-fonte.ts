@@ -49,6 +49,10 @@ const FONTE: Record<ProviderDeMensagem, FonteDeTemplates | null> = {
   datafy: "graph",
   // Rede social: não há definição aprovada (a janela só reabre quando o cliente escreve).
   meta_social: null,
+  // Bot do Telegram (#3440): texto livre a qualquer hora, como o canal por QR —
+  // não existe definição aprovada a listar, e um seletor ali ofereceria solução
+  // para um problema que este canal não tem.
+  telegram: null,
 };
 
 /** `null` quando este canal não trabalha com definições aprovadas. */
