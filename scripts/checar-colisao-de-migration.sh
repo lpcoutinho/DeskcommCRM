@@ -157,6 +157,10 @@ adicionadas_nomes="$(xargs -n1 basename <<<"$adicionadas" | sed '/^$/d')"
 
 base_arvore="$(git ls-tree -r --name-only "$BASE" -- supabase/migrations 2>/dev/null | sed 's#^supabase/migrations/##' || true)"
 head_arvore="$(git ls-tree -r --name-only HEAD -- supabase/migrations 2>/dev/null | sed 's#^supabase/migrations/##' || true)"
+# Colide só o arquivo da base que CONTINUA depois do merge. O que este PR remove ou renomeia
+# (a renumeração do fork, por exemplo: 0740 → 8001) sai da árvore e libera o número; contá-lo
+# reprovaria justamente o PR que desfaz a colisão.
+base_que_fica="$(comm -12 <(sort <<<"$base_arvore") <(sort <<<"$head_arvore"))"
 
 # ── as outras refs da máquina (issue #1155) ────────────────────────────────────────────
 base_commit="$(git rev-parse "$BASE^{commit}" 2>/dev/null || true)"
@@ -378,8 +382,8 @@ while IFS= read -r nome; do
     continue
   fi
 
-  colisao_n="$(grep -E "^[0-9]{14}_${nnnn}_.+\.sql$" <<<"$base_arvore" || true)"
-  colisao_t="$(grep -E "^${ts}_[0-9]{4}_.+\.sql$" <<<"$base_arvore" || true)"
+  colisao_n="$(grep -E "^[0-9]{14}_${nnnn}_.+\.sql$" <<<"$base_que_fica" || true)"
+  colisao_t="$(grep -E "^${ts}_[0-9]{4}_.+\.sql$" <<<"$base_que_fica" || true)"
   if [ -n "$colisao_n" ]; then
     lista="$(tr '\n' ' ' <<<"$colisao_n" | sed 's/ *$//')"
     echo "::error file=$caminho::NNNN=$nnnn já existe em '$BASE': $lista"

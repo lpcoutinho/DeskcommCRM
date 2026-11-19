@@ -2,15 +2,23 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api/client";
 import { liberarEcoLocal, marcarEcoLocal } from "@/lib/kanban/local-echo";
+import { fundeRespostaNoCard } from "@/lib/kanban/owner";
 import { ApiError } from "@/lib/api/types";
 import { showApiError } from "@/components/feedback/ApiErrorToast";
 import type { Lead } from "@/lib/types/leads";
 import type { BoardData } from "@/lib/kanban/types";
 
-interface MoveArgs {
+export interface MoveArgs {
   leadId: string;
   stageId: string;
-  positionInStage: number;
+  /**
+   * A POSIÇÃO NA ETAPA DE DESTINO — opcional desde a página inteira do negócio
+   * (#4151). Arrastar no quadro sempre a manda (o ponto entre dois cards está na
+   * tela). Quem move pela página não tem a coluna: ele só conhece a etapa, e o
+   * servidor posiciona pela régua de entrada (`posicaoDeEntradaNaEtapa`, #3461).
+   * Ver `position_in_stage` em `moveLeadSchema`.
+   */
+  positionInStage?: number;
   expectedUpdatedAt: string;
   /**
    * Os campos que o diálogo de campos obrigatórios coletou (issue #1536) —
@@ -19,6 +27,8 @@ interface MoveArgs {
   customFields?: Record<string, unknown>;
   /** O motivo do ganho coletado pelo mesmo diálogo, quando o destino fecha. */
   wonReason?: string;
+  /** O motivo da perda, quando o destino é a etapa de perda — na MESMA escrita (#917). */
+  lostReason?: string;
 }
 
 /**
@@ -67,10 +77,15 @@ export function useMoveCard(pipelineId: string, opcoes: OpcoesDeMove = {}) {
       marcarEcoLocal(args.leadId);
       return apiClient.post<{ data: Lead }>(`/api/v1/leads/${args.leadId}/move`, {
         stage_id: args.stageId,
-        position_in_stage: args.positionInStage,
+        // Omitida de propósito quando ausente: o servidor lê a etapa de destino
+        // e posiciona (#4151). Mandar `undefined` não é o mesmo que mandar 0.
+        ...(args.positionInStage !== undefined
+          ? { position_in_stage: args.positionInStage }
+          : {}),
         expected_updated_at: args.expectedUpdatedAt,
         ...(args.customFields ? { custom_fields: args.customFields } : {}),
         ...(args.wonReason !== undefined ? { won_reason: args.wonReason } : {}),
+        ...(args.lostReason !== undefined ? { lost_reason: args.lostReason } : {}),
       });
     },
     onMutate: async (args) => {
@@ -81,7 +96,20 @@ export function useMoveCard(pipelineId: string, opcoes: OpcoesDeMove = {}) {
           ...snapshot,
           leads: snapshot.leads.map((l) =>
             l.id === args.leadId
-              ? { ...l, stage_id: args.stageId, position_in_stage: args.positionInStage }
+              ? {
+                  ...l,
+                  stage_id: args.stageId,
+                  // A ENTRADA NA ETAPA também, quando a etapa muda: o gatilho
+                  // da 0071 vai carimbar `stage_changed_at` agora, e sem isto
+                  // a barra de etapas e o rodapé do card mostravam, até a
+                  // resposta chegar, os dias da etapa ANTIGA na etapa nova.
+                  ...(args.stageId !== l.stage_id
+                    ? { stage_changed_at: new Date().toISOString() }
+                    : {}),
+                  ...(args.positionInStage !== undefined
+                    ? { position_in_stage: args.positionInStage }
+                    : {}),
+                }
               : l,
           ),
         });
@@ -97,7 +125,9 @@ export function useMoveCard(pipelineId: string, opcoes: OpcoesDeMove = {}) {
         atual
           ? {
               ...atual,
-              leads: atual.leads.map((l) => (l.id === args.leadId ? { ...l, ...res.data } : l)),
+              leads: atual.leads.map((l) =>
+                l.id === args.leadId ? fundeRespostaNoCard(l, res.data) : l,
+              ),
             }
           : atual,
       );

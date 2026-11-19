@@ -15,6 +15,11 @@ export interface ModuloCatalogo {
 
 export const CATALOGO_DE_MODULOS: readonly ModuloCatalogo[] = [
   {
+    slug: "cadencias",
+    nome: "Cadências de e-mail",
+    descricao: "Sequências de e-mail por negócio, com envio pela instalação, descadastro e abertura somente com consentimento. Contribuição de Marcelo (@lmarceloc), PR #1738.",
+  },
+  {
     slug: "honorarios",
     nome: "Honorários (advocacia)",
     descricao:
@@ -43,6 +48,34 @@ export const CATALOGO_DE_MODULOS: readonly ModuloCatalogo[] = [
     descricao:
       "Agendar e publicar posts (imagem, vídeo, carrossel, reels e stories) nas contas de " +
       "Instagram conectadas, com a fila e o histórico do que saiu e do que falhou.",
+  },
+  {
+    slug: "lista_de_espera",
+    nome: "Lista de espera da agenda",
+    descricao:
+      "Quando um horário abre, a vaga é oferecida a uma pessoa por vez, entre quem aceitou ser " +
+      "avisado. Cada empresa escolhe os prazos da oferta antes de ligar.",
+  },
+  {
+    // #3611: volta ao catálogo junto com a tela de gestão (#3636) — antes dela,
+    // instalar daria uma tabela que ninguém conseguia abrir.
+    slug: "ouvidoria",
+    nome: "Ouvidoria",
+    descricao:
+      "Registro de manifestações (reclamações, denúncias, elogios, sugestões) com protocolo " +
+      "próprio, leitura restrita a administradores e sem cartão no funil. Quem não instala " +
+      "o módulo não carrega a tabela.",
+  },
+  {
+    // #4227 (doc 356): integração de um fornecedor, para um nicho — módulo
+    // desligado de fábrica, como cadências. Sem instalar, nenhuma tabela, tela,
+    // rota, ferramenta da IA ou robô existe.
+    slug: "amigo",
+    nome: "Amigo (sistema de clínicas)",
+    descricao:
+      "Liga a agenda ao sistema de clínicas Amigo: pacientes, convênios, vagas e consultas vêm de lá, " +
+      "e a IA marca, remarca e cancela pelo Amigo. Cada empresa cadastra o próprio token. " +
+      "Contribuição de @jadsonlsouza, PR #4227.",
   },
 ];
 

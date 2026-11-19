@@ -65,6 +65,69 @@ const DIR_MIGRATIONS = path.join(process.cwd(), "supabase", "migrations");
  * dado existente faz o `update.sh` de um clone quebrar no meio.
  */
 const REMOCOES_DELIBERADAS: Record<string, { valores: string[]; porque: string }> = {
+  "20261027170000_9027_assinatura_desconectada_na_central.sql::agent_inbox_items_kind_check": {
+    valores: ["publicacao_falhou"],
+    porque:
+      "NÃO é remoção de propósito: é o encontro do fork com o original, a mesma forma " +
+      "da 0312→0326 abaixo. A 8002 (exclusiva do fork) acrescentou `publicacao_falhou`, e " +
+      "esta migration do original reconstruiu a constraint sem enxergar o valor. A " +
+      "forward-fix é a 8004 (`reconcilia_fork_com_v1_102`), que reafirma a UNIÃO: o estado " +
+      "FINAL da cadeia tem o valor de volta.",
+  },
+  "20261028224500_9033_recuperar_mensagens_da_queda.sql::agent_inbox_items_kind_check": {
+    valores: ["publicacao_falhou"],
+    porque:
+      "NÃO é remoção de propósito: é o encontro do fork com o original, a mesma forma " +
+      "da 0312→0326 abaixo. A 8002 (exclusiva do fork) acrescentou `publicacao_falhou`, e " +
+      "esta migration do original reconstruiu a constraint sem enxergar o valor. A " +
+      "forward-fix é a 8004 (`reconcilia_fork_com_v1_102`), que reafirma a UNIÃO: o estado " +
+      "FINAL da cadeia tem o valor de volta.",
+  },
+  "20261111024427_9327_aviso_de_modelo_no_canal_direto.sql::agent_inbox_items_kind_check": {
+    valores: ["publicacao_falhou"],
+    porque:
+      "NÃO é remoção de propósito: é o encontro do fork com o original, a mesma forma " +
+      "da 9027 acima. A 8002 (exclusiva do fork) acrescentou `publicacao_falhou`, e esta " +
+      "migration do original reconstruiu a constraint sem enxergar o valor. A forward-fix " +
+      "é a 8005 (`reconcilia_fork_com_v1_118`), que reafirma a UNIÃO: o estado FINAL da " +
+      "cadeia tem o valor de volta.",
+  },
+  "20261111055005_9333_roteamento_espera_a_ia_por_numero.sql::agent_inbox_items_kind_check": {
+    valores: ["publicacao_falhou"],
+    porque:
+      "NÃO é remoção de propósito: é o encontro do fork com o original, a mesma forma " +
+      "da 9027 acima. A 8002 (exclusiva do fork) acrescentou `publicacao_falhou`, e esta " +
+      "migration do original reconstruiu a constraint sem enxergar o valor. A forward-fix " +
+      "é a 8005 (`reconcilia_fork_com_v1_118`), que reafirma a UNIÃO: o estado FINAL da " +
+      "cadeia tem o valor de volta.",
+  },
+  "20261111162814_9342_canal_do_bot_do_telegram.sql::webhook_events_log_provider_check": {
+    valores: ["meta_social"],
+    porque:
+      "NÃO é remoção de propósito: é o encontro do fork com o original, a mesma forma " +
+      "da 9027 acima. A 8001 (exclusiva do fork) acrescentou `meta_social`, e esta " +
+      "migration do original reconstruiu a constraint sem enxergar o valor. A forward-fix " +
+      "é a 8005 (`reconcilia_fork_com_v1_118`), que reafirma a UNIÃO: o estado FINAL da " +
+      "cadeia tem o valor de volta.",
+  },
+  "20261115215200_9397_aviso_do_retorno_que_nao_sai.sql::agent_inbox_items_kind_check": {
+    valores: ["publicacao_falhou"],
+    porque:
+      "NÃO é remoção de propósito: é o encontro do fork com o original, a mesma forma " +
+      "da 9027 acima. A 8002 (exclusiva do fork) acrescentou `publicacao_falhou`, e esta " +
+      "migration do original reconstruiu a constraint sem enxergar o valor. A forward-fix " +
+      "é a 8005 (`reconcilia_fork_com_v1_118`), que reafirma a UNIÃO: o estado FINAL da " +
+      "cadeia tem o valor de volta.",
+  },
+  "20261117220000_9418_efi_bank_como_provedor.sql::webhook_events_log_provider_check": {
+    valores: ["meta_social"],
+    porque:
+      "NÃO é remoção de propósito: é o encontro do fork com o original, a mesma forma " +
+      "da 9027 acima. A 8001 (exclusiva do fork) acrescentou `meta_social`, e esta " +
+      "migration do original reconstruiu a constraint sem enxergar o valor. A forward-fix " +
+      "é a 8005 (`reconcilia_fork_com_v1_118`), que reafirma a UNIÃO: o estado FINAL da " +
+      "cadeia tem o valor de volta.",
+  },
   "20260918231000_0312_aviso_de_followup_sem_agente.sql::agent_inbox_items_kind_check": {
     valores: ["aviso_de_caso_nao_entregue"],
     porque:

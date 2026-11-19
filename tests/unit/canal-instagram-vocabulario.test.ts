@@ -18,7 +18,7 @@ import { fonteDeTemplates } from "@/lib/channels/templates-fonte";
  * os artefatos que andam juntos.
  */
 const PROVIDER = "meta_social" as const;
-const MIGRATION = "supabase/migrations/20261022230000_0740_instagram_nativo.sql";
+const MIGRATION = "supabase/migrations/20261022230000_8001_instagram_nativo.sql";
 
 describe("canal Instagram nativo — vocabulário e seam", () => {
   it("é rede social: janela de 24h, sem modelos, sem banimento por volume, sem grupos", () => {
@@ -53,7 +53,7 @@ describe("canal Instagram nativo — vocabulário e seam", () => {
     const baseline = readFileSync("supabase/baseline.sql", "utf8");
     expect(baseline).toMatch(/channel_sessions_provider_check[\s\S]{0,800}'meta_social'::text/);
     expect(baseline).toMatch(/provider = 'meta_social' and meta_social_account_id is not null/);
-    expect(baseline).toMatch(/webhook_events_log_provider_check check \(provider in \([\s\S]{0,400}'meta_social'/);
+    expect(baseline).toMatch(/webhook_events_log_provider_check check \(provider in \([\s\S]{0,1200}'meta_social'/);
     expect(baseline).toContain("channel_sessions_meta_social_account_id_ativo_unique");
     // Colunas ANTES do CHECK que as referencia — senão o install quebra.
     expect(baseline.indexOf("add column if not exists meta_social_account_id")).toBeLessThan(

@@ -69,6 +69,7 @@ const TABELAS_NA_CASCATA = [
   // `lgpd-cascata-alcanca-quem-guarda-pessoa.test.ts` não a alcança — é ESTA
   // catraca que segura o passo 6d de não sumir.
   "conversation_notes",
+  "crm_lead_attachments", //9243 — o arquivo vai para a fila e a linha sai
   "crm_lead_activities", //0071 — payload, metadata e `reason` escrito por LLM
   "crm_leads", //          0019 — título, descrição, campos personalizados, tags
   // 0477 — destinatario_nome (nome impresso no PDF), briefing_json e
@@ -112,7 +113,7 @@ const TABELAS_NA_CASCATA = [
   // que o expurgo não alcançava. Prova de comportamento em
   // `lgpd-alcanca-prospeccao-de-quem-ja-era-contato.test.ts`.
   "prospecting_candidates",
-  // 0742 — o texto e o @ do comentário numa publicação. Sem FK para
+  // 8003 — o texto e o @ do comentário numa publicação. Sem FK para
   // `contacts` (quem comenta pode nunca ter mandado DM): o vínculo é
   // `author_identity`, a mesma forma de `contacts.social_identity`, lida antes
   // do passo 1. Nenhum gate automático a alcança; é esta catraca que a segura.
@@ -124,6 +125,16 @@ const TABELAS_NA_CASCATA = [
   // `lgpd-cascata-alcanca-quem-guarda-pessoa.test.ts` (FK para `contacts` +
   // coluna de nome-de-PII), e nulificar não perde nada operacional.
   "channel_session_groups",
+  // 0772 (#3316) — a fila de proposta de campo do card lida num documento. O
+  // passo 5b redige `trecho`, `valor_proposto` e `valor_anterior` (o mesmo
+  // tratamento do `custom_fields` do próprio negócio, passo 5): campo, status
+  // e decisão permanecem, o conteúdo identificável sai. Alcança por vínculo do
+  // lead com o contato (crm_leads + crm_lead_links), como os passos 4 e 5.
+  "lead_field_proposals",
+  // 9043 (Spec 31 §B8) — os telefones extras da ficha, com o `lid` do WhatsApp
+  // de cada um. A linha sai inteira (passo 1b): número de telefone não tem
+  // versão anonimizada que ainda sirva para alguma coisa.
+  "contact_phones",
 ] as const;
 
 /**
@@ -136,11 +147,15 @@ const TABELAS_NA_CASCATA = [
 const TIPOS_RESERVADOS = [
   "ai.case_closed", //               0279
   "ai.case_opened", //               0279
+  "ai.case_updated", //              9240 — manda WhatsApp à equipe com comando preso à atualização
   "appointment.outcome_confirmed", //herdado
-  "comment.received", //             0742 — só o INSERT em social_comments o emite
+  "comment.received", //             8003 — só o INSERT em social_comments o emite
   "contact.birthday", //             0551
   "contact.phone_added", //          0670
   "conversation.autonomous_turn_revoked", //0594 — revogação nativa, sessão não pode forjar
+  "conversation.closed", //          9212 — encerramento é do gatilho; forjado, mandaria mensagem pós-atendimento
+  "lead.date_field_due", //          0743
+  "lead.stage_stale", //             9206 — mesma reserva do 0743: só o servidor emite
   "message.received", //             herdado
 ] as const;
 

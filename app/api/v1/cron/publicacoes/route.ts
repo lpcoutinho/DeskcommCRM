@@ -1,4 +1,6 @@
-import { NextResponse, type NextRequest } from "next/server";
+import type { NextRequest } from "next/server";
+
+import { fail, ok } from "@/lib/api/wrappers";
 
 import { autorizaCron } from "@/lib/auth/cron-auth";
 import { rodadaDePublicacao } from "@/lib/publicacoes/fila";
@@ -18,20 +20,14 @@ export const dynamic = "force-dynamic";
 
 async function executar(req: NextRequest) {
   if (!autorizaCron(req))
-    return NextResponse.json(
-      { error: { code: "unauthenticated", message: "cron secret inválido" } },
-      { status: 401 },
-    );
+    return fail("unauthenticated", "cron secret inválido", 401);
   try {
     const resultados = await rodadaDePublicacao(createAdminClient());
     const contagem: Record<string, number> = {};
     for (const r of resultados) contagem[r.desfecho] = (contagem[r.desfecho] ?? 0) + 1;
-    return NextResponse.json({ data: { processados: resultados.length, ...contagem } });
+    return ok({ processados: resultados.length, ...contagem });
   } catch {
-    return NextResponse.json(
-      { error: { code: "internal_error", message: "A fila de publicações não pôde ser lida." } },
-      { status: 500 },
-    );
+    return fail("internal_error", "A fila de publicações não pôde ser lida.", 500);
   }
 }
 

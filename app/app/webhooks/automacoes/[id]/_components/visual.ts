@@ -3,6 +3,7 @@ import type { ComponentType } from "react";
 import {
   Bell,
   Brain,
+  CalendarCheck,
   ChatCircle,
   EnvelopeSimple,
   FlowArrow,
@@ -11,6 +12,7 @@ import {
   ListChecks,
   PaperPlaneTilt,
   Play,
+  Signpost,
   Sparkle,
   Tag,
   UserCircle,
@@ -52,6 +54,8 @@ export const VISUAL_DA_ACAO: Record<ActionType, VisualDaCaixa> = {
   send_email: { icon: EnvelopeSimple, paleta: "Enviar e-mail", ...SUCESSO },
   send_ai_message: { icon: Sparkle, paleta: "Mensagem pela IA", ...ACCENT_SOLIDO },
   add_tag: { icon: Tag, paleta: "Adicionar tag", ...ACCENT },
+  // A mesma etiqueta, na cor de AVISO: a caixa apaga em vez de acrescentar.
+  remove_tag: { icon: Tag, paleta: "Tirar tag", ...AVISO },
   assign_owner: { icon: UserCircle, paleta: "Atribuir atendente", ...INFO },
   call_webhook: { icon: WebhooksLogo, paleta: "Avisar outro sistema", ...ACCENT },
   start_message_flow: { icon: FlowArrow, paleta: "Iniciar follow-up", ...SUCESSO },
@@ -59,12 +63,20 @@ export const VISUAL_DA_ACAO: Record<ActionType, VisualDaCaixa> = {
   apply_task_plan: { icon: ListChecks, paleta: "Plano de tarefas", ...AVISO },
   reply_comment: { icon: ChatCircle, paleta: "Responder em público", ...SUCESSO },
   private_reply_comment: { icon: PaperPlaneTilt, paleta: "Responder no privado", ...SUCESSO },
+  // #3727 — a caixa que grava um dado em vez de falar: CalendarCheck porque o
+  // dado é a data do COMPARECIMENTO, e INFO porque é escrita no card, não
+  // mensagem (mesma família do "Criar/mover lead").
+  set_lead_date_field: { icon: CalendarCheck, paleta: "Data do atendimento", ...INFO },
   // #2642 — o único destino que não é o lead: a EQUIPE. UsersThree porque quem
   // recebe é gente da casa (o WhatsApp cadastrado em Avisos), e SUCESSO
   // porque a caixa envia, como as
   // duas vizinhas de mensagem. Entrada exigida pelo Record<ActionType, …> da
   // main (o tipo ganhou `notify_team` neste PR).
   notify_team: { icon: UsersThree, paleta: "Mensagem para a equipe", ...SUCESSO },
+  // #3881 — a caixa que escolhe a FILA. Signpost porque setor é uma placa que
+  // aponta para onde a conversa vai, e INFO porque é escrita no card (como
+  // atribuir e mover de etapa), não mensagem.
+  define_sector: { icon: Signpost, paleta: "Setor da conversa", ...INFO },
 };
 
 /** A ordem da paleta: a mesma do seletor "Adicionar ação" do editor de hoje. */

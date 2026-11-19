@@ -20,12 +20,30 @@
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
+// A cifragem da conta Resend precisa da chave ANTES de `lib/env` carregar.
+vi.hoisted(() => {
+  process.env.AI_CRED_AES_KEY = "iBc1Z2gYaAH4rEHs1dHQ2dvNQ6t4OfrdE1/Y6OSvtZY=";
+});
+
 vi.mock("@/lib/email/roteador", () => ({ sendEmail: vi.fn() }));
+
+// A SDK da Resend é mockada para o CAMINHO DA CONTA DA ORGANIZAÇÃO (#3287):
+// quando a ação escolhe a conta dela, quem recebe o `send` é este dupe. O
+// roteador da plataforma continua mockado acima — os dois caminhos são
+// distintos, e é isso que o critério A mede.
+const { orgSendMock } = vi.hoisted(() => ({ orgSendMock: vi.fn() }));
+vi.mock("resend", () => ({
+  // `function` (não arrow) para ser CONSTRUÍVEL: a ação faz `new Resend(...)`.
+  Resend: vi.fn(function () {
+    return { emails: { send: orgSendMock }, domains: { list: vi.fn() } };
+  }),
+}));
 
 import { sendEmail } from "@/lib/email/roteador";
 import { getAction } from "@/lib/automation/actions";
 import type { ActionCtx } from "@/lib/automation/types";
 import { actionSchema } from "@/lib/schemas/webhooks";
+import { bufToBytea, encryptKey } from "@/lib/crypto/aes_gcm";
 
 import {
   JANELA_DO_LIMITE_SEG,
@@ -145,12 +163,65 @@ interface Leitura {
   lidas: string[];
 }
 
+/**
+ * `organizations` tem DUAS leituras nesta ação, e o dublê as separa pela FORMA
+ * da consulta — não por um flag:
+ *
+ *   - `select("settings")` → o remetente da organização desta fatia (#3287);
+ *   - `select("locale")`   → o idioma do resumo da equipe (`{{resumo}}`), que só
+ *                            roda quando o modelo usa a variável. É ESTA que
+ *                            entra em `lidas`; a de `settings` não, porque não é
+ *                            resumo — e é isso que mantém honesta a asserção de
+ *                            que o modelo sem `{{resumo}}` não lê tabela de
+ *                            resumo nenhuma.
+ */
+function tabelaDaOrganizacao(
+  marca: Record<string, unknown> | null,
+  leitura: Leitura | null,
+  orgId = "org-1",
+) {
+  const linha: Linha = {
+    id: orgId,
+    locale: "pt-BR",
+    settings: marca === null ? null : { branding: marca },
+  };
+  let restantes: Linha[] = [linha];
+  let colunas = "";
+  const consulta = {
+    select: (c: string) => {
+      colunas = c;
+      return consulta;
+    },
+    eq: (coluna: string, valor: unknown) => {
+      restantes = restantes.filter((l) => l[coluna] === valor);
+      return consulta;
+    },
+    is: () => consulta,
+    maybeSingle: async () => {
+      if (colunas.includes("locale")) {
+        // A leitura do idioma só existe junto com o resumo: se ela acontecer sem
+        // `{{resumo}}` no modelo, o dublê diz isso em vez de devolver um valor.
+        if (leitura === null) throw new Error("leitura do resumo sem {{resumo}} no modelo");
+        leitura.lidas.push("organizations");
+      }
+      return { data: restantes[0] ?? null, error: null };
+    },
+  };
+  return consulta;
+}
+
 function ctx(
   override: Record<string, unknown> = {},
   vinculos: Vinculo[] = EQUIPE_ATIVA,
   falhaDaConsulta: { message: string } | null = null,
   resumo: Leitura | null = null,
   emailDoAcesso: (id: string) => string | null = () => "dono@estudio.com",
+  /** O `settings.branding` da organização — o remetente da automação (#3287). */
+  marcaDaOrganizacao: Record<string, unknown> | null = null,
+  /** A linha de `organization_resend_accounts` — a conta Resend conectada (#3287). */
+  contaResend: Linha | null = null,
+  /** A organização do EVENTO: é ela que o remetente tem de seguir, e só ela. */
+  orgId = "org-1",
 ): ActionCtx {
   return {
     admin: {
@@ -161,6 +232,16 @@ function ctx(
       },
       from: (tabela: string) => {
         if (tabela === "user_organizations") return tabelaDeVinculos(vinculos, falhaDaConsulta);
+        // A CONTA RESEND da organização (#3287, fatia da conta própria). Sem
+        // linha, a ação cai no roteador da plataforma — a invariância
+        // "sem conta = como hoje". `tabelaGenerica` aplica o `.eq` de org.
+        if (tabela === "organization_resend_accounts") {
+          return tabelaGenerica(contaResend === null ? [] : [contaResend]);
+        }
+        // `organizations` é lida pela AÇÃO (o remetente da automação, #3287) e —
+        // só com `{{resumo}}` — pelo carregador do resumo. O dublê separa as
+        // duas pela forma da consulta; ver `tabelaDaOrganizacao`.
+        if (tabela === "organizations") return tabelaDaOrganizacao(marcaDaOrganizacao, resumo, orgId);
         // Sem `resumo`, ler qualquer outra tabela é defeito: o dublê estoura e
         // o teste de `{{resumo}}` que não é usado vira vermelho se a ação
         // passar a carregar o resumo sempre.
@@ -169,13 +250,13 @@ function ctx(
         return tabelaGenerica(resumo.tabelas[tabela] ?? []);
       },
     } as unknown as ActionCtx["admin"],
-    organizationId: "org-1",
+    organizationId: orgId,
     ruleId: "rule-1",
     ruleName: "Aviso de viagem",
     requestId: "evt-1",
     event: {
       id: "evt-1",
-      organization_id: "org-1",
+      organization_id: orgId,
       event_type: "lead.stage_changed",
       entity_kind: "crm_lead",
       entity_id: "lead-1",
@@ -192,10 +273,12 @@ const acao = () => getAction("send_email");
 
 beforeEach(() => {
   enviar.mockReset();
+  orgSendMock.mockReset();
   // Sucesso por PADRÃO no dublê: um teste de recusa não pode passar só porque o
   // transporte estourou com `undefined` — se a ação chamar o envio quando não
   // devia, a asserção de `skipped` é quem fica vermelha, não um TypeError.
   enviar.mockResolvedValue({ ok: true, id: "e-mail-padrao", via: "smtp" });
+  orgSendMock.mockResolvedValue({ data: { id: "e-mail-da-org" }, error: null });
 });
 
 describe("send_email no schema", () => {
@@ -212,6 +295,23 @@ describe("send_email no schema", () => {
 });
 
 describe("a automação dispara send_email", () => {
+  it.each([
+    { nome: null, esperado: "aluno" },
+    { nome: "Ana Souza", esperado: "Ana" },
+  ])("reserva chega ao transporte com nome=$nome", async ({ nome, esperado }) => {
+    const contact = { ...(contexto().contact as Record<string, unknown>), name: nome };
+    const r = await acao()!.execute(ctx({ contact }), {
+      ...CONFIG,
+      assunto: 'Olá {{primeiro_nome|"aluno"}}',
+      corpo: 'Oi {{primeiro_nome|"aluno"}}!',
+    });
+
+    expect(r.status).toBe("success");
+    expect(enviar).toHaveBeenCalledTimes(1);
+    expect(enviar.mock.calls[0]![0].subject).toBe(`Olá ${esperado}`);
+    expect(enviar.mock.calls[0]![0].text).toBe(`Oi ${esperado}!`);
+  });
+
   it("destinatário e variáveis já resolvidos no envio", async () => {
     enviar.mockResolvedValue({ ok: true, id: "e-mail-1", via: "resend" });
 
@@ -650,5 +750,230 @@ describe("send_email — a variável {{resumo}} (#2642)", () => {
     const pedido = enviar.mock.calls[0]![0];
     expect(pedido.html).toContain("Pontuação: 72%");
     expect(pedido.html).toContain("<p>");
+  });
+});
+
+/**
+ * #3287 (fatia 1) — o REMETENTE DA ORGANIZAÇÃO no e-mail da automação.
+ *
+ * O que este bloco prende, e é o critério de aceite da issue:
+ *
+ *   1. com nome de exibição e "responder para" GRAVADOS na organização, os dois
+ *      chegam ao `sendEmail` — o dublê do cliente de e-mail registra `fromName`
+ *      e `replyTo`, e é por eles que o teste mede;
+ *   2. SEM configuração, o envio sai como sempre saiu: as duas chaves ficam
+ *      AUSENTES do pedido, não `null` nem `undefined`. A diferença importa: o
+ *      caminho SMTP da plataforma usa o `fromName` DELE quando ninguém passa um,
+ *      e um `undefined` explícito não é a mesma coisa que a chave ausente;
+ *   3. o ENDEREÇO do `From` não vem daqui — quem decide o transporte e o
+ *      endereço é `lib/email/roteador.ts`, e esta ação não passa `from`. O SMTP
+ *      próprio da organização é a FATIA 2 e não entra nesta fatia.
+ */
+describe("send_email — o remetente da organização (#3287, fatia 1)", () => {
+  /** A configuração da organização como a tela de marca a grava em `settings.branding`. */
+  const COM_REMETENTE = { email_from_name: "Loja da Ana", email_reply_to: "contato@lojadaana.com" };
+
+  it("com nome e responder-para configurados, os dois chegam ao envio", async () => {
+    enviar.mockResolvedValue({ ok: true, id: "e-mail-org", via: "resend" });
+
+    const r = await acao()!.execute(
+      ctx({}, EQUIPE_ATIVA, null, null, undefined, COM_REMETENTE),
+      CONFIG,
+    );
+
+    expect(enviar).toHaveBeenCalledTimes(1);
+    const pedido = enviar.mock.calls[0]![0];
+    expect(pedido.fromName).toBe("Loja da Ana");
+    expect(pedido.replyTo).toBe("contato@lojadaana.com");
+    // O endereço do `From` continua sendo decidido pelo roteador: a ação NÃO
+    // manda `from`, então o domínio da plataforma segue no cabeçalho.
+    expect("from" in pedido).toBe(false);
+    expect(r.status).toBe("success");
+  });
+
+  it("sem configuração da organização, o envio sai como hoje: sem fromName e sem replyTo", async () => {
+    enviar.mockResolvedValue({ ok: true, id: "e-mail-hoje", via: "smtp" });
+
+    await acao()!.execute(ctx(), CONFIG);
+
+    const pedido = enviar.mock.calls[0]![0];
+    // AUSENTES, não `null`: o SMTP da plataforma usa o `fromName` dele quando a
+    // chave não vem, e é esse o comportamento de hoje.
+    expect("fromName" in pedido).toBe(false);
+    expect("replyTo" in pedido).toBe(false);
+    expect(pedido).toEqual({
+      to: "ana@exemplo.com",
+      subject: "Sua viagem para Gramado",
+      html: expect.stringContaining("Ana Souza"),
+      text: expect.stringContaining("Ana Souza"),
+      tags: [{ name: "origem", value: "automacao" }],
+    });
+  });
+
+  it("organização com marca mas SEM o remetente: nada muda no envio", async () => {
+    enviar.mockResolvedValue({ ok: true, id: "e-mail-marca", via: "smtp" });
+
+    await acao()!.execute(
+      ctx({}, EQUIPE_ATIVA, null, null, undefined, { app_name: "Loja da Ana", accent_hex: "#b3261e" }),
+      CONFIG,
+    );
+
+    const pedido = enviar.mock.calls[0]![0];
+    expect("fromName" in pedido).toBe(false);
+    expect("replyTo" in pedido).toBe(false);
+  });
+
+  it("responder-para torto não vira cabeçalho: só o nome vai", async () => {
+    enviar.mockResolvedValue({ ok: true, id: "e-mail-torto", via: "smtp" });
+
+    await acao()!.execute(
+      ctx({}, EQUIPE_ATIVA, null, null, undefined, {
+        email_from_name: "Loja da Ana",
+        email_reply_to: "não é endereço",
+      }),
+      CONFIG,
+    );
+
+    const pedido = enviar.mock.calls[0]![0];
+    expect(pedido.fromName).toBe("Loja da Ana");
+    expect("replyTo" in pedido).toBe(false);
+  });
+
+  it("leitura da organização que não volta degrada para o de hoje, e o e-mail sai", async () => {
+    enviar.mockResolvedValue({ ok: true, id: "e-mail-degradado", via: "smtp" });
+
+    // Sem `organizations` no dublê (marca `null`) a leitura responde linha nula —
+    // o mesmo desfecho de "a organização não configurou nada". O caminho do erro
+    // de banco é o irmão deste caso em `lib/email/remetente-da-organizacao.ts`.
+    const r = await acao()!.execute(ctx(), CONFIG);
+
+    expect(r.status).toBe("success");
+    expect("fromName" in enviar.mock.calls[0]![0]).toBe(false);
+  });
+
+  /**
+   * O REMETENTE DE OUTRA EMPRESA NUNCA VAZA — o critério que fecha a fatia 1.
+   *
+   * O risco não é hipotético: o processo serve várias organizações e este
+   * caminho poderia ganhar um memo (o de `marcaDaSaida` já existe e é tentador
+   * reaproveitar). Com memo sem chave por organização, o segundo disparo sairia
+   * assinado pela primeira — e o cliente final da empresa B receberia um e-mail
+   * com o nome da empresa A. O teste força TRÊS organizações no mesmo processo,
+   * nesta ordem: A configurada, B configurada, C sem configuração. A e B provam
+   * que cada uma usa o PRÓPRIO remetente; C prova que nem o vazio herda o que
+   * acabou de passar por aqui.
+   */
+  it("empresa A nunca assina como B: cada disparo lê a organização do próprio evento", async () => {
+    enviar.mockResolvedValue({ ok: true, id: "e-mail-org", via: "smtp" });
+
+    await acao()!.execute(
+      ctx({}, EQUIPE_ATIVA, null, null, undefined, {
+        email_from_name: "Loja da Ana",
+        email_reply_to: "contato@lojadaana.com",
+      }, null, "org-a"),
+      CONFIG,
+    );
+    await acao()!.execute(
+      ctx({}, EQUIPE_ATIVA, null, null, undefined, {
+        email_from_name: "Loja do Beto",
+        email_reply_to: "oi@lojadobeto.com",
+      }, null, "org-b"),
+      CONFIG,
+    );
+    await acao()!.execute(
+      ctx({}, EQUIPE_ATIVA, null, null, undefined, null, null, "org-c"),
+      CONFIG,
+    );
+
+    const daA = enviar.mock.calls[0]![0];
+    const daB = enviar.mock.calls[1]![0];
+    const daC = enviar.mock.calls[2]![0];
+
+    expect(daA.fromName).toBe("Loja da Ana");
+    expect(daA.replyTo).toBe("contato@lojadaana.com");
+    expect(daB.fromName).toBe("Loja do Beto");
+    expect(daB.replyTo).toBe("oi@lojadobeto.com");
+    // O que o cliente de B NUNCA pode ver no cabeçalho é o nome ou a resposta de A
+    // — as duas linhas acima já negam; esta diz o que o vazamento pareceria.
+    expect([daB.fromName, daB.replyTo]).not.toContain("Loja da Ana");
+    expect([daB.fromName, daB.replyTo]).not.toContain("contato@lojadaana.com");
+    // E depois de duas organizações configuradas, a terceira sai como sempre saiu.
+    expect("fromName" in daC).toBe(false);
+    expect("replyTo" in daC).toBe(false);
+  });
+});
+
+
+/**
+ * A CONTA RESEND DA ORGANIZAÇÃO (#3287, fatia da conta própria).
+ *
+ * O critério (A): com a conta conectada, o e-mail da AUTOMAÇÃO sai pela conta
+ * DELA (o SDK da Resend recebe o `send`), e o roteador da plataforma NÃO é
+ * chamado. O critério (C) é o espelho: sem conta, é o roteador de sempre e a
+ * SDK não toca nada. A B (e-mail de sistema não passa por aqui) é estrutural —
+ * esta ação SÓ é o caminho da automação; convite/LGPD/recuperação seguem pelo
+ * roteador e por `lib/email/resend.ts`, que este teste não altera.
+ */
+describe("a conta Resend da organização na automação (#3287)", () => {
+  const CHAVE_ORG = "re_org_key_1234567890";
+
+  /** Uma linha CIFRADA de verdade da conta da organização. */
+  function linhaContaResend(fromEmail = "contato@lojadaana.com") {
+    const env = encryptKey(CHAVE_ORG);
+    return {
+      organization_id: "org-1",
+      api_key_ciphertext: bufToBytea(env.ciphertext),
+      api_key_iv: bufToBytea(env.iv),
+      api_key_tag: bufToBytea(env.tag),
+      api_key_last4: env.last4,
+      from_email: fromEmail,
+    };
+  }
+
+  it("cifra ilegível falha sem tentar o remetente da plataforma", async () => {
+    const linha = { ...linhaContaResend(), api_key_tag: "invalida" };
+    const r = await acao()!.execute(ctx({}, EQUIPE_ATIVA, null, null, undefined, null, linha), CONFIG);
+    expect(r).toMatchObject({ status: "failed", error: "conta_de_email_indisponivel" });
+    expect(enviar).not.toHaveBeenCalled();
+    expect(orgSendMock).not.toHaveBeenCalled();
+  });
+
+  it("com conta conectada, o envio sai pela CONTA da organização e o roteador não é chamado", async () => {
+    const r = await acao()!.execute(ctx({}, EQUIPE_ATIVA, null, null, undefined, null, linhaContaResend()), CONFIG);
+
+    // O caminho da conta: o `send` da SDK (Resend da ORGANIZAÇÃO) recebeu o envio.
+    expect(orgSendMock).toHaveBeenCalledTimes(1);
+    expect(orgSendMock.mock.calls[0]![0].from).toContain("@lojadaana.com");
+    // ...e o roteador da plataforma NÃO foi chamado (o da conta prevalece).
+    expect(enviar).not.toHaveBeenCalled();
+    expect(r.status).toBe("success");
+    // `via` é "resend" — a conta é Resend, só que a da organização.
+    expect(r).toMatchObject({ detail: { via: "resend" } });
+  });
+
+  it("sem conta conectada, é o roteador de sempre — a SDK não toca nada (regressão zero)", async () => {
+    const r = await acao()!.execute(ctx(), CONFIG);
+
+    expect(enviar).toHaveBeenCalledTimes(1);
+    expect(orgSendMock).not.toHaveBeenCalled();
+    expect(r.status).toBe("success");
+  });
+
+  it("o NOME de exibição da fatia 1 continua valendo no envio pela conta da organização", async () => {
+    await acao()!.execute(
+      ctx({}, EQUIPE_ATIVA, null, null, undefined, { email_from_name: "Loja da Ana" }, linhaContaResend()),
+      CONFIG,
+    );
+    expect(orgSendMock.mock.calls[0]![0].from).toBe('Loja da Ana <contato@lojadaana.com>');
+  });
+
+  it("erro de domínio não verificado na conta vira `dominio_nao_verificado`, não falha opaca", async () => {
+    orgSendMock.mockResolvedValue({
+      data: null,
+      error: { name: "validation_error", message: "The domain is not verified" },
+    });
+    const r = await acao()!.execute(ctx({}, EQUIPE_ATIVA, null, null, undefined, null, linhaContaResend()), CONFIG);
+    expect(r.status).toBe("failed");
+    expect(r.error).toBe("dominio_nao_verificado");
   });
 });

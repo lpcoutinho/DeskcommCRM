@@ -3,7 +3,7 @@ import { render, screen, fireEvent } from "@testing-library/react";
 import { AgentInboxList } from "@/app/app/ai/inbox/_components/AgentInboxList";
 import { useAgentInbox, useResolveAllInboxItems, useUpdateInboxItem, type AgentInboxItem } from "@/hooks/ai/useAgentInbox";
 import { ApiError } from "@/lib/api/types";
-vi.mock("@/hooks/ai/useAgentInbox", () => ({ useAgentInbox: vi.fn(), useUpdateInboxItem: vi.fn(), useResolveAllInboxItems: vi.fn() }));
+vi.mock("@/hooks/ai/useAgentInbox", () => ({ useAgentInbox: vi.fn(), useUpdateInboxItem: vi.fn(), useResolveAllInboxItems: vi.fn(), useDispararAcoesParadas: () => ({ mutate: vi.fn(), isPending: false, isError: false }) }));
 vi.mock("@/hooks/i18n/useT", () => ({ useT: () => (s: string) => s }));
 vi.mock("@/hooks/i18n/useLocaleDeData", () => ({ useLocaleDeData: () => undefined }));
 const mutate = vi.fn();
@@ -22,6 +22,11 @@ describe("Central: navegação separada da resolução", () => {
     expect(mutate).toHaveBeenCalledExactlyOnceWith({ id: "aviso", status: "resolved" });
     // Sem resposta de sucesso, o item continua aberto: não há remoção otimista.
     expect(screen.getByText(item.title)).toBeVisible();
+  });
+  it("o link do destino tem 44px de altura no celular", () => {
+    render(<AgentInboxList canResolve />);
+    // O size `sm` dá `h-11`, mas o `h-auto` do link o derruba; o piso volta só abaixo de md.
+    expect(screen.getByRole("link", { name: "Abrir conversa" }).className.split(/\s+/)).toContain("max-md:min-h-11");
   });
   it("resolvido mantém contexto e reabertura independente", () => {
     dados({ ...item, status: "resolved" }); render(<AgentInboxList canResolve />);

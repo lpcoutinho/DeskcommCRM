@@ -3,11 +3,13 @@
  *
  * ═══ O que esta ação NÃO faz ═══
  *
- * Ela não escolhe transporte, não abre conexão e não conhece credencial: quem
- * entrega é `lib/email/roteador.ts` (SMTP configurado → SMTP; sem SMTP →
- * Resend), o MESMO caminho de um convite ou de um alarme de LGPD. Escrever um
- * segundo transporte aqui seria o defeito que o roteador existe para matar
- * (ver o cabeçalho dele: trocar oito `import` por um não é somar).
+ * Ela não abre conexão nem decifra credencial. Há UM desvio: se a organização
+ * conectou a conta Resend dela, quem entrega é `lib/email/resend-da-organizacao.ts`,
+ * e conta ilegível falha com motivo próprio, sem trocar o remetente. Sem conta
+ * conectada, quem entrega é `lib/email/roteador.ts` (SMTP configurado → SMTP; sem
+ * SMTP → Resend), o MESMO caminho de um convite ou de um alarme de LGPD. Escrever
+ * outro transporte aqui seria o defeito que o roteador existe para matar (ver o
+ * cabeçalho dele: trocar oito `import` por um não é somar).
  *
  * ═══ O que ela faz ═══
  *
@@ -52,12 +54,32 @@
  * O consentimento segue o gate FIXO de `guarda-do-contato.ts` (lê
  * `declined_at`, não a ausência de `granted_at` — ver o cabeçalho daquele
  * arquivo): sem isso, TODO contato que nunca perguntado não receberia nada.
+ *
+ * ═══ DE QUEM o e-mail sai (#3287, fatia 1) ═══
+ *
+ * O remetente é da ORG quando ela configurou nome de exibição e/ou "responder
+ * para" (`lib/email/remetente-da-organizacao.ts`), e da PLATAFORMA quando não.
+ * O ENDEREÇO do `From` NUNCA vem daqui: trocar o transporte é a fatia 2 desta
+ * mesma issue (o SMTP próprio da organização), e o e-mail de SISTEMA — convite,
+ * recuperação de senha, LGPD — segue intocado, com o remetente da plataforma.
  */
 import { registerAction } from "@/lib/automation/actions";
 import type { ActionCtx, ActionResultDetail } from "@/lib/automation/types";
 import { carregarResumoParaAEquipe } from "@/lib/automation/resumo-do-evento";
+import { instanteDoEnvio } from "@/lib/automation/instante-do-envio";
 import { renderTemplate } from "@/lib/automation/template";
+import {
+  remetenteDaOrganizacaoDeSettings,
+  SEM_REMETENTE_DA_ORGANIZACAO,
+  type RemetenteDaOrganizacao,
+} from "@/lib/email/remetente-da-organizacao";
+import {
+  carregarContaResend,
+  enviarPelaContaDaOrganizacao,
+} from "@/lib/email/resend-da-organizacao";
 import { sendEmail, type EmailDeliveryError } from "@/lib/email/roteador";
+import { logger } from "@/lib/logger";
+import { recusaRegistrada } from "@/lib/lgpd/recusa-registrada";
 import { checkRateLimit, peekRateLimit } from "@/lib/ai/dispatcher/rate-limit";
 
 /**
@@ -111,7 +133,7 @@ interface ContatoDoContexto {
   id: string;
   is_blocked?: boolean;
   email?: string | null;
-  consent?: { marketing?: { declined_at?: string | null } | null } | null;
+  consent?: unknown;
 }
 
 /** O veredito do destinatário — o `motivo` é o que vira `detail.reason`. */
@@ -192,8 +214,8 @@ async function resolverDestinatario(
   const contact = ctx.context.contact as ContatoDoContexto | undefined;
   if (!contact) return { ok: false, motivo: "no_contact" };
   if (contact.is_blocked) return { ok: false, motivo: "contact_blocked" };
-  // Recusa registrada — não "grant ausente". Ver `guarda-do-contato.ts`.
-  if (contact.consent?.marketing?.declined_at) return { ok: false, motivo: "consent_declined" };
+  // Recusa registrada — não "grant ausente". Ver `guarda-do-contato.ts`. Nos dois formatos.
+  if (recusaRegistrada(contact.consent)) return { ok: false, motivo: "consent_declined" };
   const email = emailValido(contact.email);
   return email ? { ok: true, endereco: email } : { ok: false, motivo: "no_email" };
 }
@@ -219,6 +241,44 @@ function codigoDaFalha(erro: EmailDeliveryError | undefined): string {
     default:
       return "email_recusado";
   }
+}
+
+/** Códigos de falha já registrados neste processo — sem isto, um banco fora do ar enche o log. */
+const avisosDeRemetenteRegistrados = new Set<string>();
+
+/**
+ * O REMETENTE com que este e-mail sai (#3287, fatia 1).
+ *
+ * Lê `organizations.settings` — a MESMA linha onde a marca da organização já
+ * vive — e devolve o nome de exibição e o "responder para" que ela configurou,
+ * quando configurou. Sem configuração, ou com a leitura falhando, devolve o
+ * vazio: o envio sai exatamente como sempre saiu.
+ *
+ * `ctx.admin` e não um cliente novo: a ação já recebe este client para as
+ * outras leituras (vínculo de equipe, resumo), e uma segunda conexão aqui
+ * esconderia de quem testa que este caminho também vai ao banco.
+ */
+async function remetenteDaAutomacao(ctx: ActionCtx): Promise<RemetenteDaOrganizacao> {
+  const { data, error } = await ctx.admin
+    .from("organizations")
+    .select("settings")
+    .eq("id", ctx.organizationId)
+    .maybeSingle();
+  if (error) {
+    // Recusa que NÃO derruba o envio: o e-mail sai como sempre saiu, e o motivo
+    // fica no log — mesma disciplina de `lib/branding/saida.ts`, onde a leitura
+    // da marca degrada em vez de trocar um problema de estética por um e-mail
+    // que não sai. Um aviso por código evita encher o log a cada disparo.
+    if (!avisosDeRemetenteRegistrados.has(error.code ?? "?")) {
+      avisosDeRemetenteRegistrados.add(error.code ?? "?");
+      logger.warn("remetente da automação: não deu para ler a organização; vale o remetente da plataforma", {
+        codigo: error.code,
+        detalhe: error.message,
+      });
+    }
+    return SEM_REMETENTE_DA_ORGANIZACAO;
+  }
+  return remetenteDaOrganizacaoDeSettings((data as { settings?: unknown } | null)?.settings ?? null);
 }
 
 function escaparHtml(texto: string): string {
@@ -319,10 +379,14 @@ async function execute(
   }
 
   const contexto = await contextoDoEnvio(ctx, assunto, corpo);
-  const assuntoPronto = renderTemplate(assunto, contexto);
-  const corpoPronto = renderTemplate(corpo, contexto);
+  // #3687 — `{{saudacao}}` resolve no instante do envio (o mesmo das outras
+  // telas). Sem o token no texto, nenhuma leitura extra: `undefined`.
+  const agora = await instanteDoEnvio(ctx.admin, ctx.organizationId, assunto, corpo);
+  const assuntoPronto = renderTemplate(assunto, contexto, undefined, agora);
+  const corpoPronto = renderTemplate(corpo, contexto, undefined, agora);
   // No HTML, cada valor de fora (contato, negócio) entra como texto.
-  const corpoHtml = formato === "html" ? renderTemplate(corpo, contexto, escaparHtml) : corpoPronto;
+  const corpoHtml =
+    formato === "html" ? renderTemplate(corpo, contexto, escaparHtml, agora) : corpoPronto;
 
   // A consulta do `postponeUntil` é só o atalho; quem decide é esta contagem.
   // `skipped`, não `postponed`: o motor não reexecuta um evento por resultado
@@ -331,15 +395,44 @@ async function execute(
   if (!teto.allowed) {
     return { type: "send_email", status: "skipped", detail: { reason: "email_limite_atingido", destinatario } };
   }
-  const resultado = await sendEmail({
+  // Depois do teto, de propósito: recusa por limite não paga a leitura do
+  // `settings` da organização. Quem não vai enviar não precisa saber o remetente.
+  const remetente = await remetenteDaAutomacao(ctx);
+  const pedido = {
     to: para.endereco,
     subject: assuntoPronto,
     html: corpoParaHtml(corpoHtml, formato),
     text: corpoParaTexto(corpoPronto, formato),
+    // O remetente da ORGANIZAÇÃO (#3287, fatia 1): quando ela configurou um
+    // nome de exibição e/ou um "responder para", o e-mail da automação sai com
+    // eles. Sem configuração, as duas chaves ficam AUSENTES e o envio sai byte a
+    // byte como sempre saiu (`fromName: undefined` não é o mesmo que a chave
+    // ausente para quem monta o cabeçalho).
+    ...(remetente.fromName ? { fromName: remetente.fromName } : {}),
+    ...(remetente.replyTo ? { replyTo: remetente.replyTo } : {}),
     // Mesma tag da cobrança, com o valor que diz de ONDE veio: no painel da
     // Resend dá para separar o envio de automação do convite de equipe.
     tags: [{ name: "origem", value: "automacao" }],
-  });
+  };
+  // DE QUEM o e-mail sai (#3287, fatia da conta própria): se a organização
+  // conectou a CONTA Resend DELA, este envio sai por ela — o domínio no `From:`
+  // é o da organização e os eventos de entrega caem na conta dele. Sem conta
+  // conectada, o roteador da plataforma entrega como sempre. Erro de leitura
+  // ou cifra inválida não autoriza trocar a identidade de quem envia.
+  let conta;
+  try {
+    conta = await carregarContaResend(ctx.admin, ctx.organizationId);
+  } catch {
+    return {
+      type: "send_email",
+      status: "failed",
+      error: "conta_de_email_indisponivel",
+      detail: { destinatario, via: "resend" },
+    };
+  }
+  const resultado = conta
+    ? { ...(await enviarPelaContaDaOrganizacao(conta, pedido)), via: "resend" as const }
+    : await sendEmail(pedido);
 
   const base = { destinatario, via: resultado.via ?? null };
   if (!resultado.ok) {

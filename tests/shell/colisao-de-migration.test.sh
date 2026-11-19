@@ -376,7 +376,14 @@ pr_no_principal() { # $1 = número do PR, $2 = nome da migration que a cabeça d
   [ "$push_ok" = 1 ] || { echo "pr_no_principal: push para refs/pull/$1/head falhou 3x" >&2; exit 90; }
 }
 gate_prs() { # $1 = PRs abertos que o gh falso lista, $2 = clone
-  ( export FAKE_GH_PRS="$1"; cd "$2" && bash scripts/checar-colisao-de-migration.sh origin/main 2>&1 )
+  # O Actions exporta GITHUB_REF=refs/pull/N/merge com o N DESTE PR. O gate tira
+  # esse número da população para o PR não se acusar. Sem limpar aqui, o cenário
+  # cujo número coincide com o PR que roda a suíte deixa de ser "outro PR" —
+  # medido no #11, caso 26 (o sintético também era o 11): o aviso sumiu e a
+  # saída foi "O seu fica fora: #11".
+  ( unset GITHUB_REF
+    export FAKE_GH_PRS="$1"
+    cd "$2" && bash scripts/checar-colisao-de-migration.sh origin/main 2>&1 )
 }
 pr_no_principal 7 "20260917100000_0276_do_fork.sql"
 pr_no_principal 9 "20260917120000_0400_abandonado.sql"
@@ -626,6 +633,18 @@ assert_exit "$code" 0 "a falha transiente de checkout é absorvida"
 assert_exit "$(wc -l < "$n33" | tr -d ' ')" 2 "e absorvida REPETINDO o clone, não aceitando o da 1ª tentativa"
 if [ -n "$(ls "$d/supabase/migrations/" 2>/dev/null)" ]; then ok "a árvore chega inteira"
 else falha "a árvore chega inteira" "supabase/migrations vazio: seguiu com o clone pela metade"; fi
+
+echo "34. o PR que renumera o arquivo da base libera o número (a sync do fork: 0740 → 8001)"
+# O fork renumerou as próprias migrations para não colidir com o original; o PR que traz o
+# original acrescenta o 0262 dele E tira o 0262 do fork. Depois do merge só um 0262 existe.
+c="$TMP/c34"; clonar "$c"; git -C "$c" switch -q -c sync/original
+git -C "$c" mv supabase/migrations/20260101120000_0262_existente.sql \
+              supabase/migrations/20260101130000_8001_do_fork.sql
+migrar "$c" "20260101110000_0262_do_original.sql"
+commit "$c" "renumera a do fork e traz a do original com o mesmo NNNN"
+saida="$(gate "$c")"; code=$?
+assert_exit "$code" 0 "o número que o PR libera não é colisão"
+assert_not_contains "$saida" "CI REPROVADO" "não acusa o arquivo que sai da árvore"
 
 echo
 if [ "$falhas" = 0 ]; then echo "colisao-de-migration: $casos casos, todos verdes"; exit 0

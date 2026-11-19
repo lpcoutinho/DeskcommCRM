@@ -6,7 +6,7 @@ import { showApiError } from "@/components/feedback/ApiErrorToast";
 import { useT } from "@/hooks/i18n/useT";
 import { apiClient } from "@/lib/api/client";
 import { ApiError } from "@/lib/api/types";
-import { FRASES_DE_FALHA, fraseDaFalhaDeCanal } from "@/lib/channels/frases-de-falha";
+import { motivoDaFalhaDaMensagem } from "@/lib/inbox/motivo-da-falha";
 
 /** Recarrega o fio após o canal confirmar, sem fingir sucesso antes da resposta. */
 export function useAlterarMensagem(conversationId: string | null) {
@@ -49,6 +49,14 @@ export function useAlterarMensagem(conversationId: string | null) {
     },
     onError: showApiError,
   });
+  const reagir = useMutation({
+    mutationFn: ({ id, emoji }: { id: string; emoji: string }) =>
+      apiClient.post(`/api/v1/messages/${id}/reactions`, { emoji }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["messages", conversationId] });
+    },
+    onError: showApiError,
+  });
   // Reenvio da mensagem que falhou, na mesma linha. Sem toast: a própria bolha
   // muda (sai de "Falhou"). A recarga é explícita porque a rede de segurança do
   // fio só percebe mensagem nova, não troca de status — e vale também na
@@ -56,7 +64,7 @@ export function useAlterarMensagem(conversationId: string | null) {
   // servidor, e depois de um "não" a bolha tem de mostrar o estado real.
   const reenviar = useMutation({
     mutationFn: ({ id, confirmado }: { id: string; confirmado: boolean }) =>
-      apiClient.post<{ data: { status: string; error_code: string | null } }>(
+      apiClient.post<{ data: { status: string; error_code: string | null; error_message: string | null } }>(
         `/api/v1/messages/${id}/retry`,
         confirmado ? { confirmado: true } : {},
       ),
@@ -66,11 +74,7 @@ export function useAlterarMensagem(conversationId: string | null) {
     onSuccess: (res) => {
       const msg = res?.data;
       if (msg?.status !== "failed") return;
-      const codigo = msg.error_code ?? "";
-      const motivo = fraseDaFalhaDeCanal(codigo)
-        ? t(FRASES_DE_FALHA[codigo] as string)
-        : t("Não foi possível enviar esta mensagem.");
-      toast.error(t("A mensagem não saiu de novo."), { description: motivo });
+      toast.error(t("A mensagem não saiu de novo."), { description: motivoDaFalhaDaMensagem(msg, t) });
     },
     onSettled: () => {
       qc.invalidateQueries({ queryKey: ["messages", conversationId] });
@@ -82,5 +86,5 @@ export function useAlterarMensagem(conversationId: string | null) {
       showApiError(err);
     },
   });
-  return { editar, apagar, ocultar, restaurar, reenviar };
+  return { editar, apagar, ocultar, restaurar, reenviar, reagir };
 }
